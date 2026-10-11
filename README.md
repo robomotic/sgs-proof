@@ -85,6 +85,7 @@ Final evaluation success after 1000 PPO iterations, mean ± std over 3 seeds (6 
 - **Uniform sampling gets nothing from scale.** Overall success stays flat at about 0.5 from 4K to 64K. Success on the hardest goals *drops* from 0.22 to about 0.1. This matches the paper's diagnosis: the minibatch count is fixed, so larger batches only average more already-solved configurations into the same number of gradient steps.
 - **SGS gets the most out of the largest scale.** At 64K, SGS reaches 0.62 on the hardest goals, against 0.10 for uniform.
 - **SGS beats PLR at every scale (Q1), when PLR is given a sensible temperature.** Only SGS improves with more environments; PLR and uniform stay flat. See [PLR baseline](#plr-baseline).
+- **Not specific to one maze.** SGS beats uniform by 12–13 points on each of 4 other layouts. See [Other maze layouts](#other-maze-layouts).
 - **Capability at small scale (Q2).** Even at 4K, SGS solves roughly twice as many of the hardest goals as uniform. A separate single-seed run on a smaller 6×6 maze showed the same pattern: 0.46 vs 0.24 on long goals.
 
 ### What didn't (cleanly) reproduce
@@ -114,6 +115,20 @@ Seeds: PLR β=1 has 3 per point; PLR β=0.1 has 2, 2 and 1 (cancelled early).
 **The default PLR temperature (β=0.1) breaks at this scale.**
 
 With β=0.1, PLR does **much worse than uniform**. This comes from the default setting, not a code bug. PLR weights configs by rank^(−1/β) = rank^(−10). With 32,768 configs that sends **about 90% of all resets to the single highest-scoring config**, so each batch of 4K+ environments is nearly one task. PLR's defaults were tuned for about 64 environments. The paper doesn't say which PLR settings it used, but its PLR roughly matches uniform on most tasks, so it can't have been this degenerate. With β=1, about 8% of resets go to the top config. That's the fair comparison above.
+
+### Other maze layouts
+
+Is the result specific to one maze? Here are four more 8×8 layouts (`--maze-seed 1..4`), 4K envs, 1 seed each. The original layout is maze 0.
+
+| Maze | SGS, all goals | Uniform, all goals | PLR β=1, all goals | SGS, hardest | Uniform, hardest | PLR β=1, hardest |
+|---|---|---|---|---|---|---|
+| 0 (3 seeds) | **0.63** | 0.52 | 0.58 | **0.47** | 0.22 | 0.33 |
+| 1 | **0.51** | 0.38 | 0.32 | **0.11** | 0.01 | 0.00 |
+| 2 | **0.58** | 0.45 | 0.38 | **0.29** | 0.04 | 0.00 |
+| 3 | **0.43** | 0.30 | 0.36 | 0.00 | 0.00 | 0.00 |
+| 4 | **0.61** | 0.47 | 0.47 | **0.06** | 0.02 | 0.04 |
+
+**SGS beats uniform on every layout, by 12–13 points.** That's a remarkably consistent gap. PLR (β=1) is less robust: it beat uniform on maze 0 but loses to it on mazes 1 and 2, ties on maze 4, and wins only on maze 3. The new layouts are harder than maze 0 for every method, and the hardest goals stay mostly out of reach at 4K.
 
 ### Acrobot: a negative control
 
@@ -175,8 +190,8 @@ The 8×8 maze was chosen so that uniform sampling plateaus around 50% instead of
 | # | Experiment | Why | Est. GPU time | Status |
 |---|---|---|---|---|
 | 1 | **PLR with β=1.0**, 4K/16K/64K × 3 seeds | Fair version of the paper's main baseline (see above) | ~4 h | **Done** |
-| 2 | **4 more maze layouts** (`--maze-seed 1..4`) × {SGS, uniform, PLR β=1}, 4K | Check that the result isn't specific to one maze | ~1 h | Running |
-| 3 | **Learning rate scaled with batch size** (√ rule: 6e-4 at 16K, 1.2e-3 at 64K) × {SGS, uniform} × 3 seeds | Rule out that uniform's flat curve is a fixed-LR artifact | ~7.5 h | Queued |
+| 2 | **4 more maze layouts** (`--maze-seed 1..4`) × {SGS, uniform, PLR β=1}, 4K | Check that the result isn't specific to one maze | ~1 h | **Done** |
+| 3 | **Learning rate scaled with batch size** (√ rule: 6e-4 at 16K, 1.2e-3 at 64K) × {SGS, uniform} × 3 seeds | Rule out that uniform's flat curve is a fixed-LR artifact | ~7.5 h | Running |
 | 4 | **128K environments** × {SGS, uniform} × 3 seeds | One more step on the scaling curve | ~12 h | Queued |
 
 Afterwards, possibly: **FetchPush** (Gymnasium-Robotics) with SGS vs uniform vs HER, as a real manipulation task. That one is CPU-bound and would take days.
