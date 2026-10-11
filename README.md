@@ -107,6 +107,8 @@ With the standard PLR temperature β=0.1, PLR does **much worse than uniform**. 
 
 To see whether the effect carries over to classical control, the same code also runs a torque-limited **Acrobot swing-up** (`--task acrobot`, in [acrobot.py](acrobot.py)). It's a two-link pendulum where only the elbow is actuated. A task configuration is (initial angles and velocities, torque limit 0.25–3, link-2 mass 0.5–1.5). Success means holding the tip above height 1.8 (out of a maximum of 2.0) for 5 steps, which means swinging up and nearly balancing. The dynamics follow Sutton & Barto with RK4 integration, and the selftest checks energy conservation.
 
+![Acrobot task configurations](acrobot_configs.png)
+
 Calibration (4K envs, 300 iterations, 1 seed) to find a difficulty where learning happens without saturating:
 
 | Success criterion | SGS | Uniform |
@@ -125,7 +127,9 @@ Final setting (bold row), 1000 iterations, 3 seeds:
 | Uniform | 0.31 ± 0.01 | 0.14 ± 0.02 | 0.41 ± 0.03 | **57–61%** |
 | SGS, κ=1, t=0.5 (1 seed) | 0.30 | 0.13 | 0.44 | 46% |
 
-**No meaningful SGS advantage on Acrobot.** The last column suggests why. Under uniform sampling, about 60% of Acrobot configs already sit at intermediate success. So uniform sampling isn't wasting the batch on solved or impossible configs, and SGS has nothing to fix. In the maze, the batch *is* dominated by solved and impossible configs.
+![Acrobot results: no gap, and why](acrobot_results.png)
+
+**No meaningful SGS advantage on Acrobot.** The last column of the table, and the right panel above, suggest why. Under uniform sampling, about 60% of Acrobot configs already sit at intermediate success. So uniform sampling isn't wasting the batch on solved or impossible configs, and SGS has nothing to fix. In the maze, 65% of configs under uniform sampling are either never solved or already mastered. That's the waste SGS removes. In Acrobot it's 41%, and most of the rest are configs the policy already learns from.
 
 Two likely reasons, neither proven:
 1. One skill, pumping energy and then balancing, transfers across all Acrobot configs, while each maze goal needs its own route.
@@ -218,6 +222,7 @@ At 4K environments training uses about 0.7 GB of GPU memory. Memory at 64K wasn'
 | `next1.sh`, `next2.sh`, `next3.sh` | Follow-up queues: extra 16K seeds; PLR β=0.1 (cancelled); PLR β=1, mazes, LR scaling, 128K |
 | `plot.py` | Scaling plot and summary from `runs_sweep/*.json` |
 | `plot_maze.py` | Maze pictures: `maze_sizes.png`, `maze_configs.png` |
+| `plot_acrobot.py` | Acrobot pictures: `acrobot_configs.png`, `acrobot_results.png` |
 | `runs_sweep/` | Per-run JSON logs (evaluation curves, success by distance, fraction of mastered configs) |
 | `runs_acro_*/`, `runs_plr_b1/`, `runs_mazes/`, `runs_lr/` | Acrobot, PLR β=1, other mazes, LR scaling |
 
