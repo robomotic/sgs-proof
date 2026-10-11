@@ -1,4 +1,5 @@
-"""Scaling plot from runs_sweep/*.json: final eval success vs parallel envs, SGS vs uniform (mean ± std over seeds)."""
+"""Scaling plot: final eval success vs parallel envs per sampler (mean ± std over seeds). Writes <first dir>/scaling.png.
+    python plot.py [dir ...]   (default: runs_sweep runs_plr_b1)"""
 import glob, json, sys
 from collections import defaultdict
 
@@ -7,15 +8,19 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-src = sys.argv[1] if len(sys.argv) > 1 else "runs_sweep"
+srcs = sys.argv[1:] or ["runs_sweep", "runs_plr_b1"]
+src = srcs[0]
 res = defaultdict(list)  # (sampler, E) -> [(overall, longest-bin)]
-for f in glob.glob(f"{src}/*.json"):
+for f in [f for d in srcs for f in glob.glob(f"{d}/*.json")]:
     r = json.load(open(f))
+    m = r["args"]["sampler"]
+    if m == "plr":
+        m = f"plr{r['args'].get('plr_beta', 0.1):g}"
     last = r["log"][-1]
-    res[r["args"]["sampler"], r["args"]["num_envs"]].append((last["eval_success"], last["eval_by_dist"]["41-60"]))
+    res[m, r["args"]["num_envs"]].append((last["eval_success"], last["eval_by_dist"]["41-60"]))
 
-colors = {"sgs": "#2a78d6", "uniform": "#eb6834", "plr": "#1baf7a"}
-names = {"sgs": "SGS", "uniform": "Uniform", "plr": "PLR (β=0.1)"}
+colors = {"sgs": "#2a78d6", "uniform": "#eb6834", "plr1": "#1baf7a", "plr0.1": "#eda100"}
+names = {"sgs": "SGS", "uniform": "Uniform", "plr1": "PLR (β=1)", "plr0.1": "PLR (β=0.1)"}
 present = [s for s in colors if any(m == s for m, _ in res)]
 all_E = sorted({E for _, E in res})
 fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)

@@ -84,6 +84,7 @@ Final evaluation success after 1000 PPO iterations, mean ± std over 3 seeds (6 
 - **SGS beats uniform at every scale.** It leads by 11–17 points overall. On the hardest goals it does 2–6× better. All 6 SGS seeds at 16K beat all 6 uniform seeds overall.
 - **Uniform sampling gets nothing from scale.** Overall success stays flat at about 0.5 from 4K to 64K. Success on the hardest goals *drops* from 0.22 to about 0.1. This matches the paper's diagnosis: the minibatch count is fixed, so larger batches only average more already-solved configurations into the same number of gradient steps.
 - **SGS gets the most out of the largest scale.** At 64K, SGS reaches 0.62 on the hardest goals, against 0.10 for uniform.
+- **SGS beats PLR at every scale (Q1), when PLR is given a sensible temperature.** Only SGS improves with more environments; PLR and uniform stay flat. See [PLR baseline](#plr-baseline).
 - **Capability at small scale (Q2).** Even at 4K, SGS solves roughly twice as many of the hardest goals as uniform. A separate single-seed run on a smaller 6×6 maze showed the same pattern: 0.46 vs 0.24 on long goals.
 
 ### What didn't (cleanly) reproduce
@@ -93,15 +94,26 @@ Final evaluation success after 1000 PPO iterations, mean ± std over 3 seeds (6 
 
 ### PLR baseline
 
-PLR (Prioritized Level Replay) is the paper's main baseline. It's implemented here as the paper describes: levels ranked by mean |GAE|, a staleness bonus, and 50% new levels until every level has been seen.
+PLR (Prioritized Level Replay) is the paper's main baseline. It's implemented here as the paper describes: levels ranked by mean |GAE|, a staleness bonus, and 50% new levels until every level has been seen. PLR's temperature β controls how strongly it favours the top-ranked levels.
 
-| Envs | PLR β=0.1, all goals | PLR β=0.1, hardest goals | Seeds |
-|---|---|---|---|
-| 4K | 0.22 | 0.00 | 2 |
-| 16K | 0.22 | 0.00 | 2 |
-| 64K | 0.21 | 0.00 | 1 |
+| Envs | SGS | **PLR β=1** | Uniform | PLR β=0.1 |
+|---|---|---|---|---|
+| *All goals* | | | | |
+| 4K | **0.63** ± 0.01 | 0.58 ± 0.03 | 0.52 ± 0.02 | 0.22 |
+| 16K | **0.62** ± 0.04 | 0.57 ± 0.05 | 0.49 ± 0.02 | 0.22 |
+| 64K | **0.68** ± 0.01 | 0.57 ± 0.05 | 0.51 ± 0.02 | 0.21 |
+| *Hardest goals* | | | | |
+| 4K | **0.47** ± 0.10 | 0.33 ± 0.05 | 0.22 ± 0.10 | 0.00 |
+| 16K | **0.41** ± 0.21 | 0.31 ± 0.12 | 0.09 ± 0.06 | 0.00 |
+| 64K | **0.62** ± 0.12 | 0.36 ± 0.03 | 0.10 ± 0.01 | 0.00 |
 
-With the standard PLR temperature β=0.1, PLR does **much worse than uniform**. This comes from the default setting, not a code bug. PLR weights configs by rank^(−1/β) = rank^(−10). With 32,768 configs that sends **about 90% of all resets to the single highest-scoring config**, so each batch of 4K+ environments is nearly one task. PLR's defaults were tuned for about 64 environments. The paper doesn't say which PLR settings it used, but its PLR roughly matches uniform on most tasks, so it can't have been this degenerate. **A fairer run with β=1.0 is in progress** (about 8% of resets go to the top config).
+Seeds: PLR β=1 has 3 per point; PLR β=0.1 has 2, 2 and 1 (cancelled early).
+
+**With a sensible temperature (β=1), PLR is a strong baseline.** It beats uniform at every scale, and on the hardest goals by 3–4×. **SGS still beats PLR at every scale, and only SGS improves with more environments.** PLR stays flat at 0.57 overall from 4K to 64K, while SGS rises to 0.68, and to 0.62 vs 0.36 on the hardest goals. That is the paper's Q1 claim ("SGS scales better than uniform *and PLR*"), reproduced in miniature.
+
+**The default PLR temperature (β=0.1) breaks at this scale.**
+
+With β=0.1, PLR does **much worse than uniform**. This comes from the default setting, not a code bug. PLR weights configs by rank^(−1/β) = rank^(−10). With 32,768 configs that sends **about 90% of all resets to the single highest-scoring config**, so each batch of 4K+ environments is nearly one task. PLR's defaults were tuned for about 64 environments. The paper doesn't say which PLR settings it used, but its PLR roughly matches uniform on most tasks, so it can't have been this degenerate. With β=1, about 8% of resets go to the top config. That's the fair comparison above.
 
 ### Acrobot: a negative control
 
@@ -162,8 +174,8 @@ The 8×8 maze was chosen so that uniform sampling plateaus around 50% instead of
 
 | # | Experiment | Why | Est. GPU time | Status |
 |---|---|---|---|---|
-| 1 | **PLR with β=1.0**, 4K/16K/64K × 3 seeds | Fair version of the paper's main baseline (see above) | ~4 h | Running |
-| 2 | **4 more maze layouts** (`--maze-seed 1..4`) × {SGS, uniform, PLR β=1}, 4K | Check that the result isn't specific to one maze | ~1 h | Queued |
+| 1 | **PLR with β=1.0**, 4K/16K/64K × 3 seeds | Fair version of the paper's main baseline (see above) | ~4 h | **Done** |
+| 2 | **4 more maze layouts** (`--maze-seed 1..4`) × {SGS, uniform, PLR β=1}, 4K | Check that the result isn't specific to one maze | ~1 h | Running |
 | 3 | **Learning rate scaled with batch size** (√ rule: 6e-4 at 16K, 1.2e-3 at 64K) × {SGS, uniform} × 3 seeds | Rule out that uniform's flat curve is a fixed-LR artifact | ~7.5 h | Queued |
 | 4 | **128K environments** × {SGS, uniform} × 3 seeds | One more step on the scaling curve | ~12 h | Queued |
 
@@ -171,7 +183,7 @@ Afterwards, possibly: **FetchPush** (Gymnasium-Robotics) with SGS vs uniform vs 
 
 **Done:** 3 more seeds at 16K (resolved the dip, see above); PLR at β=0.1 (degenerate, see above); Acrobot (negative control, see above).
 
-`plot.py` picks up any new JSON files in `runs_sweep/` automatically. Pass a directory to plot another set, for example `plot.py runs_plr_b1`.
+`plot.py` reads `runs_sweep/` and `runs_plr_b1/` by default and picks up new JSON files automatically. Pass directories to plot another set, for example `plot.py runs_lr`.
 
 ## Running it
 
