@@ -14,11 +14,13 @@ for f in glob.glob(f"{src}/*.json"):
     last = r["log"][-1]
     res[r["args"]["sampler"], r["args"]["num_envs"]].append((last["eval_success"], last["eval_by_dist"]["41-60"]))
 
-colors = {"sgs": "#2a78d6", "uniform": "#eb6834"}
-names = {"sgs": "SGS", "uniform": "Uniform"}
+colors = {"sgs": "#2a78d6", "uniform": "#eb6834", "plr": "#1baf7a"}
+names = {"sgs": "SGS", "uniform": "Uniform", "plr": "PLR (β=0.1)"}
+present = [s for s in colors if any(m == s for m, _ in res)]
+all_E = sorted({E for _, E in res})
 fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
 for ax, k, title in zip(axes, (0, 1), ("All goals", "Hardest goals (41–60 cells)")):
-    for s in ("sgs", "uniform"):
+    for s in present:
         Es = sorted(E for (m, E) in res if m == s)
         if not Es:
             continue
@@ -26,10 +28,10 @@ for ax, k, title in zip(axes, (0, 1), ("All goals", "Hardest goals (41–60 cell
         mu, sd = np.array([a.mean() for a in v]), np.array([a.std() for a in v])
         ax.fill_between(Es, mu - sd, mu + sd, color=colors[s], alpha=0.15, lw=0)
         ax.plot(Es, mu, color=colors[s], lw=2, marker="o", ms=8, mec="white", mew=2)
-        ax.annotate(f"{names[s]}  n={min(len(a) for a in v)}", (Es[-1], mu[-1]), xytext=(8, 0),
+        ax.annotate(names[s], (Es[-1], mu[-1]), xytext=(8, 0),
                     textcoords="offset points", va="center", color="#333", fontsize=9)
     ax.set_xscale("log", base=2)
-    ax.set_xticks([4096, 16384, 65536], ["4K", "16K", "64K"])
+    ax.set_xticks(all_E, [f"{E // 1024}K" for E in all_E])
     ax.set_title(title, loc="left", fontsize=11)
     ax.set_xlabel("Parallel environments")
     ax.set_ylim(0, 1)
@@ -37,8 +39,8 @@ for ax, k, title in zip(axes, (0, 1), ("All goals", "Hardest goals (41–60 cell
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
 axes[0].set_ylabel("Eval success (1000 PPO iters)")
-axes[0].legend(handles=[plt.Line2D([], [], color=colors[s], lw=2, marker="o", label=names[s]) for s in colors],
-               frameon=False, loc="lower right")
+axes[0].legend(handles=[plt.Line2D([], [], color=colors[s], lw=2, marker="o", label=names[s]) for s in present],
+               frameon=False, loc="upper right")
 fig.tight_layout()
 fig.savefig(f"{src}/scaling.png", dpi=150)
 for key in sorted(res):

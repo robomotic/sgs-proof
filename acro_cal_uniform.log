@@ -1,0 +1,6 @@
+[uniform E=4096 s=0] it    50  eval 0.047  by-torque 0.03 0.04 0.05 0.06  frontier 0.01  mastered 0.02  32s
+[uniform E=4096 s=0] it   100  eval 0.058  by-torque 0.03 0.05 0.05 0.08  frontier 0.02  mastered 0.02  65s
+[uniform E=4096 s=0] it   150  eval 0.066  by-torque 0.03 0.05 0.07 0.09  frontier 0.04  mastered 0.03  98s
+[uniform E=4096 s=0] it   200  eval 0.063  by-torque 0.04 0.05 0.08 0.07  frontier 0.06  mastered 0.03  131s
+[uniform E=4096 s=0] it   250  eval 0.073  by-torque 0.05 0.06 0.08 0.08  frontier 0.08  mastered 0.02  163s
+[uniform E=4096 s=0] it   300  eval 0.077  by-torque 0.05 0.06 0.08 0.10  frontier 0.11  mastered 0.02  196s

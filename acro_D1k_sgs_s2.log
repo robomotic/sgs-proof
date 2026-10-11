@@ -1,0 +1,4 @@
+[sgs E=4096 s=2] it   250  eval 0.220  by-torque 0.08 0.18 0.24 0.34  frontier 0.01  mastered 0.05  282s
+[sgs E=4096 s=2] it   500  eval 0.314  by-torque 0.15 0.26 0.36 0.45  frontier 0.02  mastered 0.07  564s
+[sgs E=4096 s=2] it   750  eval 0.329  by-torque 0.15 0.27 0.40 0.47  frontier 0.03  mastered 0.08  847s
+[sgs E=4096 s=2] it  1000  eval 0.324  by-torque 0.14 0.27 0.39 0.46  frontier 0.04  mastered 0.09  1123s

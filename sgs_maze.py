@@ -71,7 +71,7 @@ def make_configs(wall, D, num, max_dist, rng):
 
 class MazeEnv:
     """Point mass; action in [-1,1]^2 scaled by `speed`, axis-separated wall collision. Obs: pos, goal, delta, 5x5 wall patch."""
-    obs_dim = 6 + 25
+    obs_dim, act_dim = 6 + 25, 2
 
     def __init__(self, wall, starts, goals, num_envs, horizon, speed, device):
         self.wall = torch.as_tensor(wall, device=device)
@@ -118,13 +118,46 @@ class MazeEnv:
 # ---------------------------------------------------------------- sampler
 
 class Sampler:
-    """Keeps the last H outcomes per config. 'uniform' ignores them; 'sgs' samples softmax(log(Beta-kernel(p)+eps)/T)."""
+    """Keeps the last H outcomes per config. 'uniform' ignores them; 'sgs' samples softmax(log(Beta-kernel(p)+eps)/T);
+    'plr' is Prioritized Level Replay (Jiang et al. 2021) with mean |GAE| as the score, as in the SGS paper."""
+    plr_beta, plr_rho, plr_replay = 0.1, 0.1, 0.5  # rank temperature, staleness mix, replay prob (PLR defaults)
 
     def __init__(self, N, H, mode, target, kappa, eps, temp, device):
         self.N, self.H, self.mode = N, H, mode
         self.target, self.kappa, self.eps, self.temp = target, kappa, eps, temp
         self.hist = torch.zeros(N, H, dtype=torch.bool, device=device)
         self.ptr = torch.zeros(N, dtype=torch.long, device=device)
+        self.score = torch.zeros(N, device=device)  # PLR only
+        self.last = torch.zeros(N, device=device)
+        self.seen = torch.zeros(N, dtype=torch.bool, device=device)
+        self.clock = 0
+
+    def update_scores(self, idx, values):
+        # ponytail: score = mean |GAE| of the config's steps in the latest rollout, not over whole episodes
+        s = torch.zeros(self.N, device=values.device).index_add_(0, idx, values)
+        c = torch.zeros(self.N, device=values.device).index_add_(0, idx, torch.ones_like(values))
+        m = c > 0
+        self.score[m] = s[m] / c[m]
+        self.seen |= m
+
+    def plr_sample(self, n):
+        dev = self.score.device
+        seen, unseen = self.seen.nonzero().squeeze(1), (~self.seen).nonzero().squeeze(1)
+        n_new = n if len(seen) == 0 else 0 if len(unseen) == 0 else int(torch.binomial(
+            torch.tensor(float(n)), torch.tensor(1 - self.plr_replay)).item())
+        out = [unseen[torch.randint(len(unseen), (n_new,), device=dev)]] if n_new else []
+        if n - n_new:
+            rank = torch.empty(len(seen), device=dev)
+            rank[torch.argsort(self.score[seen], descending=True)] = torch.arange(1, len(seen) + 1, device=dev, dtype=torch.float)
+            p_score = rank ** (-1 / self.plr_beta)
+            stale = self.clock - self.last[seen]
+            p_stale = stale / stale.sum() if stale.sum() > 0 else torch.full_like(stale, 1 / len(seen))
+            p = (1 - self.plr_rho) * p_score / p_score.sum() + self.plr_rho * p_stale
+            out.append(seen[torch.multinomial(p, n - n_new, replacement=True)])
+        idx = torch.cat(out)
+        self.clock += n
+        self.last[idx] = self.clock
+        return idx
 
     def update(self, idx, succ):
         # several envs can finish the same config in one step: give each its own slot in the ring buffer
@@ -147,6 +180,8 @@ class Sampler:
     def sample(self, n):
         if self.mode == "uniform":
             return torch.randint(self.N, (n,), device=self.hist.device)
+        if self.mode == "plr":
+            return self.plr_sample(n)
         return torch.multinomial(self.probs(), n, replacement=True)
 
 
@@ -157,10 +192,10 @@ def mlp(i, o, h=256):
 
 
 class Agent(nn.Module):
-    def __init__(self, obs_dim):
+    def __init__(self, obs_dim, act_dim):
         super().__init__()
-        self.actor, self.critic = mlp(obs_dim, 2), mlp(obs_dim, 1)
-        self.logstd = nn.Parameter(torch.full((2,), -0.5))
+        self.actor, self.critic = mlp(obs_dim, act_dim), mlp(obs_dim, 1)
+        self.logstd = nn.Parameter(torch.full((act_dim,), -0.5))
 
     def dist(self, obs):
         return torch.distributions.Normal(self.actor(obs), self.logstd.exp())
@@ -168,8 +203,9 @@ class Agent(nn.Module):
 
 @torch.no_grad()
 def evaluate(agent, env, num):
-    env.reset(torch.arange(num, device=env.pos.device), torch.arange(num, device=env.pos.device))
-    solved = torch.zeros(num, dtype=torch.bool, device=env.pos.device)
+    ids = torch.arange(num, device=env.cfg.device)
+    env.reset(ids, ids)
+    solved = torch.zeros(num, dtype=torch.bool, device=env.cfg.device)
     for _ in range(env.horizon):
         _, _, succ = env.step(agent.actor(env.obs()))
         solved |= succ
@@ -179,26 +215,36 @@ def evaluate(agent, env, num):
 def train(args):
     torch.manual_seed(args.seed)
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    rng = np.random.default_rng(args.maze_seed)  # same maze + config pool across runs; only training seed varies
-    wall = make_maze(args.cells, args.braid, rng)
-    D = all_pairs_dist(wall)
-    starts, goals, dist = make_configs(wall, D, args.num_configs, args.max_dist, rng)
-    ev_starts, ev_goals, ev_dist = make_configs(wall, D, args.eval_episodes, args.max_dist, rng)  # fresh configs
-
+    rng = np.random.default_rng(args.maze_seed)  # same task + config pool across runs; only training seed varies
     E, S = args.num_envs, args.num_steps
-    env = MazeEnv(wall, starts, goals, E, args.horizon, args.speed, dev)
-    eval_env = MazeEnv(wall, ev_starts, ev_goals, args.eval_episodes, args.horizon, args.speed, dev)
+    if args.task == "maze":
+        wall = make_maze(args.cells, args.braid, rng)
+        D = all_pairs_dist(wall)
+        starts, goals, _ = make_configs(wall, D, args.num_configs, args.max_dist, rng)
+        ev_starts, ev_goals, ev_diff = make_configs(wall, D, args.eval_episodes, args.max_dist, rng)  # fresh configs
+        env = MazeEnv(wall, starts, goals, E, args.horizon, args.speed, dev)
+        eval_env = MazeEnv(wall, ev_starts, ev_goals, args.eval_episodes, args.horizon, args.speed, dev)
+        bin_name, bins = "dist", [(1, 20), (21, 40), (41, 60), (61, args.max_dist)]
+    else:
+        import acrobot
+        tau = (args.tau_min, 3.0)
+        cfgs, _ = acrobot.make_configs(args.num_configs, rng, tau)
+        ev_cfgs, ev_diff = acrobot.make_configs(args.eval_episodes, rng, tau)
+        env = acrobot.AcrobotEnv(cfgs, E, args.horizon, args.dt, args.height, args.hold, dev)
+        eval_env = acrobot.AcrobotEnv(ev_cfgs, args.eval_episodes, args.horizon, args.dt, args.height, args.hold, dev)
+        bin_name, bins = "torque", [(args.tau_min, 1.0), (1.0, 1.5), (1.5, 2.0), (2.0, 3.0)]  # low torque = hard
     sampler = Sampler(args.num_configs, args.hist, args.sampler, args.target, args.kappa, args.eps, args.temp, dev)
+    sampler.plr_beta = args.plr_beta
     env.reset(torch.arange(E, device=dev), sampler.sample(E))
 
-    agent = Agent(MazeEnv.obs_dim).to(dev)
+    agent = Agent(env.obs_dim, env.act_dim).to(dev)
     opt = torch.optim.Adam(agent.parameters(), lr=args.lr)
-    buf_obs = torch.zeros(S, E, MazeEnv.obs_dim, device=dev)
-    buf_act = torch.zeros(S, E, 2, device=dev)
+    buf_obs = torch.zeros(S, E, env.obs_dim, device=dev)
+    buf_act = torch.zeros(S, E, env.act_dim, device=dev)
     buf_logp, buf_rew, buf_done, buf_val = (torch.zeros(S, E, device=dev) for _ in range(4))
+    buf_cfg = torch.zeros(S, E, dtype=torch.long, device=dev)
 
-    ev_dist_t = torch.as_tensor(ev_dist, device=dev)
-    bins = [(1, 20), (21, 40), (41, 60), (61, args.max_dist)]
+    ev_diff_t = torch.as_tensor(ev_diff, device=dev)
     log, t0 = [], time.time()
     obs = env.obs()
     for it in range(1, args.iters + 1):
@@ -208,7 +254,7 @@ def train(args):
                 d = agent.dist(obs)
                 a = d.sample()
                 buf_val[s] = agent.critic(obs).squeeze(1)
-            buf_obs[s], buf_act[s], buf_logp[s] = obs, a, d.log_prob(a).sum(1)
+            buf_obs[s], buf_act[s], buf_logp[s], buf_cfg[s] = obs, a, d.log_prob(a).sum(1), env.cfg
             rew, done, succ = env.step(a)
             buf_rew[s], buf_done[s] = rew, done.float()
             ids = done.nonzero().squeeze(1)
@@ -229,6 +275,8 @@ def train(args):
                 last = delta + args.gamma * args.lam * nonterm * last
                 adv[s] = last
             ret = adv + buf_val
+        if args.sampler == "plr":
+            sampler.update_scores(buf_cfg.flatten(), adv.abs().flatten())
 
         b_obs, b_act, b_logp = buf_obs.flatten(0, 1), buf_act.flatten(0, 1), buf_logp.flatten(0, 1)
         b_adv, b_ret = adv.flatten(), ret.flatten()
@@ -253,18 +301,18 @@ def train(args):
             p = sampler.success_rate()
             row = dict(iter=it, env_steps=it * S * E, time=round(time.time() - t0, 1),
                        eval_success=solved.float().mean().item(),
-                       eval_by_dist={f"{lo}-{hi}": solved[(ev_dist_t >= lo) & (ev_dist_t <= hi)].float().mean().item()
-                                     for lo, hi in bins},
+                       **{f"eval_by_{bin_name}": {f"{lo}-{hi}": solved[(ev_diff_t >= lo) & (ev_diff_t <= hi)].float().mean().item()
+                                                  for lo, hi in bins}},
                        train_success=torch.cat(ep_succ).mean().item() if ep_succ else 0.0,
                        frac_frontier=((p > 0.05) & (p < 0.95)).float().mean().item(),
                        frac_mastered=(p >= 0.95).float().mean().item())
             log.append(row)
             print(f"[{args.sampler} E={E} s={args.seed}] it {it:5d}  eval {row['eval_success']:.3f}  "
-                  f"by-dist {' '.join(f'{v:.2f}' for v in row['eval_by_dist'].values())}  "
+                  f"by-{bin_name} {' '.join(f'{v:.2f}' for v in row[f'eval_by_{bin_name}'].values())}  "
                   f"frontier {row['frac_frontier']:.2f}  mastered {row['frac_mastered']:.2f}  {row['time']:.0f}s", flush=True)
 
     os.makedirs(args.out, exist_ok=True)
-    with open(f"{args.out}/{args.sampler}_E{E}_s{args.seed}.json", "w") as f:
+    with open(f"{args.out}/{args.sampler}_E{E}_s{args.seed}.json", "w") as f:  # one --out dir per task
         json.dump(dict(args=vars(args), log=log), f)
 
 
@@ -287,12 +335,21 @@ def selftest():
     assert s.ptr.tolist() == [1, 0, 4, 0] and s.hist[2].sum() == 2  # 4th write wrapped over the 1st
     pr = s.probs()
     assert pr[0] < pr[2] and abs(pr.sum().item() - 1) < 1e-5  # p=2/3 beats p=1 at target 0.5
+    s = Sampler(100, 3, "plr", 0, 0, 0, 1, "cpu")
+    s.update_scores(torch.arange(50), torch.arange(50).float())  # configs 0-49 seen, 49 scores highest
+    idx = s.sample(4000)
+    assert 0.4 < (idx >= 50).float().mean() < 0.6  # ~half new levels
+    assert (idx == 49).float().mean() > 0.3  # replay concentrates on the top-ranked config
+    s.update_scores(torch.arange(100), torch.ones(100))
+    assert len(s.sample(10)) == 10  # all configs seen: replay only
+    import acrobot
+    acrobot.selftest()
     print("selftest ok")
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--sampler", choices=["sgs", "uniform"], default="sgs")
+    ap.add_argument("--sampler", choices=["sgs", "uniform", "plr"], default="sgs")
     ap.add_argument("--num-envs", type=int, default=4096)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--iters", type=int, default=1000)
@@ -304,13 +361,19 @@ if __name__ == "__main__":
     ap.add_argument("--lam", type=float, default=0.95)
     ap.add_argument("--clip", type=float, default=0.2)
     ap.add_argument("--ent", type=float, default=0.0)
-    # maze / task
+    ap.add_argument("--task", choices=["maze", "acrobot"], default="maze")
+    # maze
     ap.add_argument("--cells", type=int, default=10)
     ap.add_argument("--braid", type=float, default=0.1)
     ap.add_argument("--maze-seed", type=int, default=0)
     ap.add_argument("--max-dist", type=int, default=80)
     ap.add_argument("--horizon", type=int, default=200)
     ap.add_argument("--speed", type=float, default=0.5)
+    # acrobot (--horizon also applies; acrobot runs should pass e.g. --horizon 400)
+    ap.add_argument("--dt", type=float, default=0.05)
+    ap.add_argument("--height", type=float, default=1.8)
+    ap.add_argument("--hold", type=int, default=10)
+    ap.add_argument("--tau-min", type=float, default=0.5)
     # SGS (paper's locomotion values)
     ap.add_argument("--num-configs", type=int, default=32768)
     ap.add_argument("--hist", type=int, default=100)
@@ -318,6 +381,7 @@ if __name__ == "__main__":
     ap.add_argument("--kappa", type=float, default=5.0)
     ap.add_argument("--eps", type=float, default=1e-8)
     ap.add_argument("--temp", type=float, default=2.0)
+    ap.add_argument("--plr-beta", type=float, default=0.1)  # PLR default; ~90% of resets hit one config at this scale
     # eval / io
     ap.add_argument("--eval-every", type=int, default=50)
     ap.add_argument("--eval-episodes", type=int, default=4096)
