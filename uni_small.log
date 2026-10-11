@@ -1,0 +1,5 @@
+[uniform E=4096 s=0] it   100  eval 0.501  by-dist 0.60 0.07 nan nan  frontier 0.26  mastered 0.37  55s
+[uniform E=4096 s=0] it   200  eval 0.643  by-dist 0.73 0.24 nan nan  frontier 0.38  mastered 0.37  109s
+[uniform E=4096 s=0] it   300  eval 0.661  by-dist 0.76 0.23 nan nan  frontier 0.39  mastered 0.38  164s
+[uniform E=4096 s=0] it   400  eval 0.698  by-dist 0.80 0.23 nan nan  frontier 0.33  mastered 0.44  219s
+[uniform E=4096 s=0] it   500  eval 0.705  by-dist 0.81 0.24 nan nan  frontier 0.29  mastered 0.49  273s

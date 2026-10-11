@@ -1,0 +1,4 @@
+[sgs E=16384 s=0] it   250  eval 0.184  by-dist 0.46 0.07 0.00 0.00  frontier 0.00  mastered 0.24  577s
+[sgs E=16384 s=0] it   500  eval 0.201  by-dist 0.51 0.08 0.00 0.00  frontier 0.00  mastered 0.26  1153s
+[sgs E=16384 s=0] it   750  eval 0.199  by-dist 0.49 0.10 0.00 0.00  frontier 0.00  mastered 0.26  1677s
+[sgs E=16384 s=0] it  1000  eval 0.224  by-dist 0.57 0.09 0.00 0.00  frontier 0.00  mastered 0.27  2153s
