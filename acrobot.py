@@ -35,6 +35,40 @@ def accel(q, a, m2):
     return torch.stack([w1, w2, dd1, dd2], 1)
 
 
+def rk4(q, torque, m2, h):
+    k1 = accel(q, torque, m2)
+    k2 = accel(q + h / 2 * k1, torque, m2)
+    k3 = accel(q + h / 2 * k2, torque, m2)
+    k4 = accel(q + h * k3, torque, m2)
+    return q + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+
+def make_reverse_configs(num, rng, tau=(0.5, 3.0), m2=(0.5, 1.5), max_back=200, dt=0.05, hold=5):
+    """Demo-based resets without an expert: simulate *backward* in time from (near) upright under random elbow torques
+    within the config's limit. Replaying those torques forward from the state k steps back returns to upright, so every
+    such start can be swung up in k steps by construction; larger k = harder (reverse curriculum, Florensa et al. 2017).
+    Starts that hit the velocity clamps are dropped (the clamp breaks reversibility). Returns (configs, k)."""
+    B = 4 * num
+    taus = torch.as_tensor(rng.uniform(*tau, B), dtype=torch.float32)
+    m2s = torch.as_tensor(rng.uniform(*m2, B), dtype=torch.float32)
+    k = torch.as_tensor(rng.integers(1, max_back + 1, B))
+    q = torch.zeros(B, 4)
+    q[:, 0] = math.pi
+    q[:, :2] += torch.as_tensor(rng.normal(0, 0.05, (B, 2)), dtype=torch.float32)
+    pushes = torch.as_tensor(rng.uniform(-1, 1, (max_back // hold + 1, B)), dtype=torch.float32) * taus
+    out, ok, ok_k = torch.zeros(B, 4), torch.ones(B, dtype=torch.bool), torch.zeros(B, dtype=torch.bool)
+    for step in range(1, max_back + 1):
+        q = rk4(q, pushes[(step - 1) // hold], m2s, -dt)  # torque held for `hold` steps, then re-drawn
+        ok &= (q[:, 2].abs() <= MAX_W1) & (q[:, 3].abs() <= MAX_W2)
+        hit = k == step
+        out[hit], ok_k[hit] = q[hit], ok[hit]
+    out[:, :2] = torch.remainder(out[:, :2] + math.pi, 2 * math.pi) - math.pi
+    keep = ok_k.nonzero().squeeze(1)[:num]
+    assert len(keep) == num, f"only {len(keep)} valid reverse starts out of {B}"
+    cfg = torch.cat([out[keep], taus[keep, None], m2s[keep, None]], 1)
+    return cfg.numpy(), k[keep].numpy()
+
+
 def energy(q, m2):
     """Total mechanical energy, for the conservation self-check."""
     th1, th2, w1, w2 = q.unbind(1)
@@ -75,12 +109,7 @@ class AcrobotEnv:
 
     def step(self, action):
         a = action[:, 0].clamp(-1, 1)
-        torque, q, h, m2 = a * self.tau, self.q, self.dt, self.m2
-        k1 = accel(q, torque, m2)
-        k2 = accel(q + h / 2 * k1, torque, m2)
-        k3 = accel(q + h / 2 * k2, torque, m2)
-        k4 = accel(q + h * k3, torque, m2)
-        q = q + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+        q = rk4(self.q, a * self.tau, self.m2, self.dt)
         q[:, :2] = torch.remainder(q[:, :2] + math.pi, 2 * math.pi) - math.pi
         q[:, 2] = q[:, 2].clamp(-MAX_W1, MAX_W1)
         q[:, 3] = q[:, 3].clamp(-MAX_W2, MAX_W2)
@@ -108,7 +137,18 @@ def selftest():
     up.reset(torch.tensor([0]), torch.tensor([0]))
     assert abs(tip_height(up.q).item() - 2.0) < 1e-6
     assert [up.step(torch.zeros(1, 1))[2].item() for _ in range(3)] == [False, False, True]  # upright counts as held
-    print(f"acrobot selftest ok (energy drift {drift:.1e})")
+    # reversibility: 30 steps backward then the same torques forward in reverse order returns to the start
+    q0 = torch.tensor([[math.pi, 0.02, 0.0, 0.0]]).repeat(8, 1)
+    m2, torques = torch.ones(8), torch.as_tensor(rng.uniform(-2, 2, (30, 8)), dtype=torch.float32)
+    q = q0
+    for a in torques:
+        q = rk4(q, a, m2, -0.05)
+    for a in torques.flip(0):
+        q = rk4(q, a, m2, 0.05)
+    assert (q - q0).abs().max() < 1e-2, (q - q0).abs().max()
+    cfg, k = make_reverse_configs(64, rng)
+    assert cfg.shape == (64, 6) and k.min() >= 1 and np.abs(cfg[:, 2]).max() <= MAX_W1
+    print(f"acrobot selftest ok (energy drift {drift:.1e}, reverse/forward error {(q - q0).abs().max():.1e})")
 
 
 if __name__ == "__main__":

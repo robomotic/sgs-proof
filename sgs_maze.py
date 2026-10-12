@@ -115,6 +115,37 @@ class MazeEnv:
         return reward, done, success
 
 
+def expert_action(env, D):
+    """BFS expert: head for the centre of the next cell on a shortest path; inside the goal cell, head for the goal.
+    Moving between two adjacent open cells stays inside their (convex) union, so the expert never hits a wall."""
+    n = env.n
+    c = env.pos[:, 1].long() * n + env.pos[:, 0].long()
+    g = env.goal[:, 1].long() * n + env.goal[:, 0].long()
+    nbr = torch.stack([c + n, c - n, c + 1, c - 1], 1)
+    on_path = D[nbr, g[:, None]] == (D[c, g] - 1)[:, None]
+    nxt = nbr.gather(1, on_path.float().argmax(1, keepdim=True)).squeeze(1)
+    target = torch.where((c == g)[:, None], env.goal, torch.stack([nxt % n, nxt // n], 1).float() + 0.5)
+    return ((target - env.pos) / env.speed).clamp(-1, 1)
+
+
+@torch.no_grad()
+def collect_demos(wall, D, starts, goals, horizon, speed, dev):
+    """Roll out the expert once per demo config; returns (obs, action) pairs until each episode succeeds, and the expert's success rate."""
+    env = MazeEnv(wall, starts, goals, len(starts), horizon, speed, dev)
+    ids = torch.arange(len(starts), device=dev)
+    env.reset(ids, ids)
+    Dt = torch.as_tensor(D, device=dev)
+    obs, act, active = [], [], torch.ones(len(starts), dtype=torch.bool, device=dev)
+    for _ in range(horizon):
+        a = expert_action(env, Dt)
+        obs.append(env.obs()[active])
+        act.append(a[active])
+        active &= ~env.step(a)[2]
+        if not active.any():
+            break
+    return torch.cat(obs), torch.cat(act), 1 - active.float().mean().item()
+
+
 # ---------------------------------------------------------------- sampler
 
 class Sampler:
@@ -216,6 +247,7 @@ def train(args):
     torch.manual_seed(args.seed)
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     rng = np.random.default_rng(args.maze_seed)  # same task + config pool across runs; only training seed varies
+    demo_obs = None
     E, S = args.num_envs, args.num_steps
     if args.task == "maze":
         wall = make_maze(args.cells, args.braid, rng)
@@ -225,11 +257,18 @@ def train(args):
         env = MazeEnv(wall, starts, goals, E, args.horizon, args.speed, dev)
         eval_env = MazeEnv(wall, ev_starts, ev_goals, args.eval_episodes, args.horizon, args.speed, dev)
         bin_name, bins = "dist", [(1, 20), (21, 40), (41, 60), (61, args.max_dist)]
+        if args.demo_frac > 0:  # demos for the first demo_frac of the (random) config pool
+            k = max(1, int(args.demo_frac * args.num_configs))
+            demo_obs, demo_act, expert_sr = collect_demos(wall, D, starts[:k], goals[:k], args.horizon, args.speed, dev)
+            print(f"demos: {k} configs, {len(demo_obs)} (obs, action) pairs, expert success {expert_sr:.3f}", flush=True)
     else:
         import acrobot
         tau = (args.tau_min, 3.0)
         cfgs, _ = acrobot.make_configs(args.num_configs, rng, tau)
         ev_cfgs, ev_diff = acrobot.make_configs(args.eval_episodes, rng, tau)
+        if args.reverse_frac > 0:  # replace the tail of the pool with backward-from-upright starts (after eval, so eval is unchanged)
+            k = int(args.reverse_frac * args.num_configs)
+            cfgs[-k:], _ = acrobot.make_reverse_configs(k, rng, tau, max_back=args.reverse_steps, dt=args.dt)
         env = acrobot.AcrobotEnv(cfgs, E, args.horizon, args.dt, args.height, args.hold, dev)
         eval_env = acrobot.AcrobotEnv(ev_cfgs, args.eval_episodes, args.horizon, args.dt, args.height, args.hold, dev)
         bin_name, bins = "torque", [(args.tau_min, 1.0), (1.0, 1.5), (1.5, 2.0), (2.0, 3.0)]  # low torque = hard
@@ -291,6 +330,10 @@ def train(args):
                 pg = -torch.min(ratio * A, ratio.clamp(1 - args.clip, 1 + args.clip) * A).mean()
                 vf = 0.5 * (agent.critic(b_obs[i]).squeeze(1) - b_ret[i]).pow(2).mean()
                 loss = pg + vf - args.ent * d.entropy().sum(1).mean()
+                if demo_obs is not None:  # DAPG-style behaviour cloning on the demo set, decaying over training
+                    di = torch.randint(len(demo_obs), (min(mb, 4096),), device=dev)
+                    bc = (agent.actor(demo_obs[di]) - demo_act[di]).pow(2).sum(1).mean()
+                    loss = loss + args.bc_coef * args.bc_decay ** it * bc
                 opt.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), 1.0)
@@ -330,6 +373,8 @@ def selftest():
     for _ in range(200):  # random actions never put the agent inside a wall
         env.step(torch.randn(512, 2) * 3)
         assert not env.is_wall(env.pos).any()
+    _, _, expert_sr = collect_demos(wall, D, starts, goals, 200, 0.5, "cpu")
+    assert expert_sr == 1.0, f"expert solved only {expert_sr}"  # BFS expert solves every config
     s = Sampler(4, 3, "sgs", 0.5, 1.0, 1e-4, 2.0, "cpu")
     s.update(torch.tensor([2, 2, 2, 2, 0]), torch.tensor([True, True, False, True, True]))
     assert s.ptr.tolist() == [1, 0, 4, 0] and s.hist[2].sum() == 2  # 4th write wrapped over the 1st
@@ -369,11 +414,16 @@ if __name__ == "__main__":
     ap.add_argument("--max-dist", type=int, default=80)
     ap.add_argument("--horizon", type=int, default=200)
     ap.add_argument("--speed", type=float, default=0.5)
+    ap.add_argument("--demo-frac", type=float, default=0.0)  # fraction of configs with expert demos (0 = off)
+    ap.add_argument("--bc-coef", type=float, default=1.0)
+    ap.add_argument("--bc-decay", type=float, default=0.995)  # per iteration: half-life ~140 iters
     # acrobot (--horizon also applies; acrobot runs should pass e.g. --horizon 400)
     ap.add_argument("--dt", type=float, default=0.05)
     ap.add_argument("--height", type=float, default=1.8)
     ap.add_argument("--hold", type=int, default=10)
     ap.add_argument("--tau-min", type=float, default=0.5)
+    ap.add_argument("--reverse-frac", type=float, default=0.0)  # fraction of pool replaced by backward-from-upright starts
+    ap.add_argument("--reverse-steps", type=int, default=200)  # max steps simulated backward
     # SGS (paper's locomotion values)
     ap.add_argument("--num-configs", type=int, default=32768)
     ap.add_argument("--hist", type=int, default=100)
