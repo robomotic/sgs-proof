@@ -56,10 +56,10 @@ def all_pairs_dist(wall):
     return D
 
 
-def make_configs(wall, D, num, max_dist, rng):
-    """Sample `num` (start_xy, goal_xy, grid_dist) configs with 1 <= dist <= max_dist. Start jittered inside its cell."""
+def make_configs(wall, D, num, max_dist, rng, min_dist=1):
+    """Sample `num` (start_xy, goal_xy, grid_dist) configs with min_dist <= dist <= max_dist. Start jittered inside its cell."""
     n = wall.shape[0]
-    s, g = np.nonzero((D >= 1) & (D <= max_dist))
+    s, g = np.nonzero((D >= min_dist) & (D <= max_dist))
     pick = rng.integers(len(s), size=num)
     s, g = s[pick], g[pick]
     start = np.stack([s % n, s // n], 1) + rng.uniform(0.2, 0.8, (num, 2))

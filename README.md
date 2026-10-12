@@ -275,6 +275,23 @@ The paper deliberately avoids demonstrations and shaped rewards. This section as
 
 But forcing a fixed 50/50 split, with SGS choosing only *within* each half (`--reverse-split`), **doesn't fix it**: 0.27 ± 0.02, no better than unsplit SGS (0.28) and still below uniform with reverse resets (0.37). So the batch share alone doesn't explain it. A remaining hypothesis: within the reverse half, SGS avoids the starts it has already mastered (p ≈ 1). Those are the near-upright, small-k starts that teach balancing, so SGS gets *less* balancing practice than uniform. Within the original half, SGS concentrates on a narrow set of mid-success configs, and Acrobot's evaluation needs broad coverage. This hasn't been tested.
 
+### Off-policy learning: SAC and Hindsight Experience Replay
+
+A side experiment in [her/](her/README.md) runs **SAC**, an off-policy learner, on the same maze, with and without **Hindsight Experience Replay** (HER: failed episodes are also stored as successes for the position actually reached) and with and without SGS. 256 envs, 3.3M environment steps, 2 seeds:
+
+| Learner | All goals | Hardest goals | Env steps | Wall-clock |
+|---|---|---|---|---|
+| **SAC, uniform** | **0.85** | 0.56 | 3.3M | 21 min |
+| SAC, SGS | 0.75 | 0.34 | 3.3M | 21 min |
+| SAC + HER | 0.72 | 0.30 | 3.3M | 21 min |
+| SAC + HER + SGS | 0.68 | 0.23 | 3.3M | 21 min |
+| PPO, SGS, 64K envs, scaled LR | 0.88 | **0.84** | 2.1B | 59 min |
+
+- **Plain SAC nearly matches the best PPO + SGS result with about 600× fewer environment steps**, and gets to 0.85 in 21 minutes where PPO needs about 50. PPO at 64K is still clearly better on the hardest goals.
+- **Neither HER nor SGS helps SAC on this pool.** Both shift training away from the real goal distribution, and SAC's replay buffer already avoids the "wasted batch" that SGS fixes for PPO. With hard goals only, HER is the only method that gets any signal (5% vs 0%).
+
+So for this problem on one small GPU, switching to an off-policy learner was worth more than any sampling strategy. Details in [her/README.md](her/README.md).
+
 ### Not tested
 
 - **SFL baseline, and hand-designed curricula.**
@@ -312,7 +329,8 @@ Afterwards, possibly: **FetchPush** (Gymnasium-Robotics) with SGS vs uniform vs 
 **Open ideas:**
 
 - **Why SGS doesn't benefit from Acrobot reverse resets.** The batch-share explanation was ruled out (see above). The next test: log success by k (steps back from upright) and see whether SGS skips the near-upright starts.
-- **Hindsight Experience Replay (HER)** (Andrychowicz et al. 2017). After a failed episode, relabel the goal as wherever the agent actually ended up, so every episode yields a success for *some* goal. SGS changes *which* tasks get practised; HER changes *what is learned* from each episode, so the two could complement each other. HER needs an off-policy learner (SAC or DDPG) instead of PPO. The maze suits it well, since the "achieved goal" is just the final position. It's also the standard baseline needed for the FetchPush idea above.
+- **HER on hard-only pools for longer.** HER was the only method that got any signal with hard goals only (see below), but it reached just 5% in 3.3M steps.
+- **Lower HER relabelling probability** on mixed pools, where the standard 0.8 crowded out the real goals.
 - **SGS + demos across scales:** do demos flatten SGS's scaling curve, or does the combination keep improving with more environments?
 - **A dynamic task with very uneven difficulty,** e.g. a point mass with inertia jumping gaps of varying width. This is closer to the paper's hard terrains than Acrobot, where every config needed the same skill.
 
@@ -334,7 +352,7 @@ uv pip install --python .venv/bin/python numpy matplotlib
 
 ## GPU budget
 
-Everything here used **about 31 hours of one RTX 4060 Ti**:
+Everything here used **about 34 hours of one RTX 4060 Ti**:
 
 | Phase | Runs | GPU wall-clock |
 |---|---|---|
@@ -348,7 +366,8 @@ Everything here used **about 31 hours of one RTX 4060 Ti**:
 | Learning-rate scaling | 12 | ~7.4 h (excluding the pause) |
 | Prior knowledge (maze demos, Acrobot reverse resets) | 18 | 1.2 h (3 runs at a time) |
 | Sensitivity, demo curve, noisy demos, Acrobot diagnosis, layout seeds | 56 | 3.7 h (4 runs at a time) |
-| **Total** | **162** | **~31 h** |
+| SAC / HER smoke tests and experiment ([her/](her/README.md)) | 18 | ~2.5 h (2–4 runs at a time) |
+| **Total** | **180** | **~34 h** |
 
 The 128K-environment runs (~12 h) were cancelled to save GPU time.
 
@@ -370,6 +389,7 @@ Training uses about 0.7 GB of GPU memory at 4K environments and about 8 GB at 64
 | `acrobot.py` | GPU-batched torque-limited Acrobot swing-up (RK4) with its energy-conservation self-test |
 | `sweep.sh` | 3 seeds × {4K, 16K, 64K} × {SGS, uniform} |
 | `priors.sh` | Prior-knowledge runs: maze demos (4K, 1K) and Acrobot reverse resets |
+| `her/` | SAC + HER side experiment: code, results, figure and its own README |
 | `cheap.sh` | SGS sensitivity, demo-value curve, noisy demos, Acrobot sampling diagnosis, more layout seeds |
 | `plot_demos.py` | Demo-value curve: `demos_curve.png` |
 | `next1.sh`, `next2.sh`, `next3.sh` | Follow-up queues: extra 16K seeds; PLR β=0.1 (cancelled); PLR β=1, mazes, LR scaling, 128K |
