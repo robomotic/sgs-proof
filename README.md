@@ -87,7 +87,7 @@ Final evaluation success after 1000 PPO iterations, mean ± std over 3 seeds (6 
 - **With the learning rate scaled to batch size, SGS improves steadily with scale**: 0.63 → 0.79 → 0.88 overall from 4K to 64K, and 0.47 → 0.68 → 0.84 on the hardest goals. Uniform improves only modestly overall and stays flat at about 0.2 on the hardest goals. This is the paper's main claim. See [Learning-rate scaling](#learning-rate-scaling).
 - **SGS beats PLR at every scale (Q1), when PLR is given a sensible temperature.** Only SGS improves with more environments; PLR and uniform stay flat. See [PLR baseline](#plr-baseline).
 - **Not specific to one maze.** SGS beats uniform by 5–12 points on each of 4 other layouts (3 seeds). See [Other maze layouts](#other-maze-layouts).
-- **Robust to SGS's own settings, except temperature.** The target and concentration can vary widely and SGS still beats uniform; a temperature that's too low collapses it. See [SGS sensitivity](#sgs-sensitivity).
+- **Robust to SGS's own settings, as the paper reports.** The target and concentration can vary widely and SGS still beats uniform. A temperature below 1 collapses it, but the paper's implementation never allows that (it floors T at 1). See [SGS sensitivity](#sgs-sensitivity).
 - **Capability at small scale (Q2).** Even at 4K, SGS solves roughly twice as many of the hardest goals as uniform. A separate single-seed run on a smaller 6×6 maze showed the same pattern: 0.46 vs 0.24 on long goals.
 
 ### What didn't (cleanly) reproduce
@@ -161,11 +161,11 @@ The paper reports that SGS isn't sensitive to most of its settings. Here each se
 | κ = 1 | 0.63 ± 0.02 | 0.44 ± 0.06 |
 | κ = 20 | 0.64 ± 0.01 | 0.50 ± 0.10 |
 | T = 8 (flatter) | 0.60 ± 0.00 | 0.31 ± 0.03 |
-| **T = 0.5 (greedier)** | **0.19** ± 0.00 | **0.00** |
+| **T = 0.5 (greedier; below the paper's floor of 1)** | **0.19** ± 0.00 | **0.00** |
 | *Uniform, for reference* | *0.52 ± 0.03* | *0.20 ± 0.11* |
 
 - **The target and concentration barely matter.** Every value of t from 0.3 to 0.8 and κ from 1 to 20 gives 0.60–0.69 overall, all well above uniform. A lower target (t=0.3, favouring harder configs) was slightly better here.
-- **Temperature is the one setting that can break SGS.** At T=0.5 the softmax becomes so peaked that the batch collapses onto a few configs, and success falls to 0.19, far *below* uniform. This is the same failure as PLR with β=0.1. A flatter T=8 behaves more like uniform sampling and loses about half the hardest-goal gain.
+- **Temperature is the one setting that can break SGS, and the paper guards against it.** At T=0.5 the softmax becomes so peaked that the batch collapses onto a few configs, and success falls to 0.19, far *below* uniform. This is the same failure as PLR with β=0.1. The paper's appendix states that its implementation **enforces a minimum temperature of 1** (T_eff = max(T, 1)), so its code would never run T=0.5. This repo's sampler has no such floor, which is why the collapse shows up here. A flatter T=8 behaves more like uniform sampling and loses about half the hardest-goal gain.
 
 ### Acrobot: a negative control
 
