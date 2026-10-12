@@ -84,13 +84,14 @@ Final evaluation success after 1000 PPO iterations, mean ± std over 3 seeds (6 
 - **SGS beats uniform at every scale.** It leads by 11–17 points overall. On the hardest goals it does 2–6× better. All 6 SGS seeds at 16K beat all 6 uniform seeds overall.
 - **Uniform sampling gets nothing from scale.** Overall success stays flat at about 0.5 from 4K to 64K. Success on the hardest goals *drops* from 0.22 to about 0.1. This matches the paper's diagnosis: the minibatch count is fixed, so larger batches only average more already-solved configurations into the same number of gradient steps.
 - **SGS gets the most out of the largest scale.** At 64K, SGS reaches 0.62 on the hardest goals, against 0.10 for uniform.
+- **With the learning rate scaled to batch size, SGS improves steadily with scale**: 0.63 → 0.79 → 0.88 overall from 4K to 64K, and 0.47 → 0.68 → 0.84 on the hardest goals. Uniform improves only modestly overall and stays flat at about 0.2 on the hardest goals. This is the paper's main claim. See [Learning-rate scaling](#learning-rate-scaling).
 - **SGS beats PLR at every scale (Q1), when PLR is given a sensible temperature.** Only SGS improves with more environments; PLR and uniform stay flat. See [PLR baseline](#plr-baseline).
 - **Not specific to one maze.** SGS beats uniform by 12–13 points on each of 4 other layouts. See [Other maze layouts](#other-maze-layouts).
 - **Capability at small scale (Q2).** Even at 4K, SGS solves roughly twice as many of the hardest goals as uniform. A separate single-seed run on a smaller 6×6 maze showed the same pattern: 0.46 vs 0.24 on long goals.
 
 ### What didn't (cleanly) reproduce
 
-- **Steady improvement with scale.** With 3 seeds, SGS appeared to dip at 16K. Three more seeds showed the dip is mostly one bad seed. Per-seed results on the hardest goals at 16K are 0.35, **0.04**, 0.57, 0.27, 0.66 and 0.57 (median about 0.46, level with 4K). So the curve is flat from 4K to 16K and then rises at 64K. That's not the steady climb the paper reports.
+- **Steady improvement with scale, at a fixed learning rate.** With the learning rate fixed at 3e-4, SGS is flat from 4K to 16K and only rises at 64K. Six seeds at 16K showed the apparent dip is mostly one bad seed (hardest-goal results 0.35, **0.04**, 0.57, 0.27, 0.66, 0.57). Once the learning rate is scaled with batch size, the steady climb appears (see below), so the fixed learning rate was holding SGS back.
 - **SGS has a failure mode.** About 1 seed in 6 never solves the long goals. Uniform never solves them well on any seed either.
 
 ### PLR baseline
@@ -115,6 +116,22 @@ Seeds: PLR β=1 has 3 per point; PLR β=0.1 has 2, 2 and 1 (cancelled early).
 **The default PLR temperature (β=0.1) breaks at this scale.**
 
 With β=0.1, PLR does **much worse than uniform**. This comes from the default setting, not a code bug. PLR weights configs by rank^(−1/β) = rank^(−10). With 32,768 configs that sends **about 90% of all resets to the single highest-scoring config**, so each batch of 4K+ environments is nearly one task. PLR's defaults were tuned for about 64 environments. The paper doesn't say which PLR settings it used, but its PLR roughly matches uniform on most tasks, so it can't have been this degenerate. With β=1, about 8% of resets go to the top config. That's the fair comparison above.
+
+### Learning-rate scaling
+
+The main sweep keeps the learning rate at 3e-4 while the batch grows 16×, so larger runs take the same number of equally sized gradient steps on much bigger batches. Does that hide the benefit of scale? Here the learning rate grows with the square root of the batch size: 3e-4 at 4K (unchanged), 6e-4 at 16K, and 1.2e-3 at 64K. 3 seeds each.
+
+| Envs | SGS, all goals | Uniform, all goals | SGS, hardest goals | Uniform, hardest goals |
+|---|---|---|---|---|
+| 4K | 0.63 ± 0.01 | 0.52 ± 0.02 | 0.47 ± 0.10 | 0.22 ± 0.10 |
+| 16K | **0.79** ± 0.02 | 0.59 ± 0.08 | **0.68** ± 0.10 | 0.19 ± 0.14 |
+| 64K | **0.88** ± 0.05 | 0.65 ± 0.04 | **0.84** ± 0.08 | 0.22 ± 0.10 |
+
+![Fixed vs scaled learning rate](runs_lr/scaling.png)
+
+- **Scaling the learning rate turns SGS's curve into a steady climb.** Overall success rises from 0.63 at 4K to 0.88 at 64K; on the hardest goals it rises from 0.47 to 0.84.
+- **Uniform gains about 13 points overall, but none on the hardest goals.** It stays around 0.2, so the extra data goes to configs it can already solve.
+- **The gap widens with scale:** 11 points at 4K, 20 at 16K, 23 at 64K overall, and from 0.25 to 0.62 on the hardest goals. A larger learning rate makes better use of a large batch only when the batch is full of useful configs, which is what SGS provides.
 
 ### Other maze layouts
 
@@ -179,9 +196,9 @@ The paper deliberately avoids demonstrations and shaped rewards. This section as
 | SGS, 4K | 0.63 ± 0.01 | 0.47 ± 0.10 |
 | **SGS + demos, 4K** | **0.81** ± 0.01 | **0.81** ± 0.05 |
 | SGS, 64K (fixed LR) | 0.68 ± 0.01 | 0.62 ± 0.12 |
-| SGS, 64K (scaled LR, 2 seeds) | 0.86 ± 0.05 | 0.81 ± 0.08 |
+| SGS, 64K (scaled LR) | 0.88 ± 0.05 | 0.84 ± 0.08 |
 
-- **Demos on 1% of configs are worth more than 16× the environments.** SGS + demos at 4K matches SGS at 64K with a tuned learning rate on the hardest goals (0.81 vs 0.81), and comes close overall (0.81 vs 0.86). At **1K** environments, SGS + demos (0.77) already beats SGS at 64K with a fixed learning rate (0.68), a 64× smaller run.
+- **Demos on 1% of configs are worth roughly 16× the environments.** SGS + demos at 4K nearly matches SGS at 64K with a scaled learning rate on the hardest goals (0.81 vs 0.84), and comes within 7 points overall (0.81 vs 0.88). At **1K** environments, SGS + demos (0.77) already beats SGS at 64K with a fixed learning rate (0.68), a 64× smaller run.
 - **Demos mostly close the SGS–uniform gap overall** (0.81 vs 0.80), but SGS keeps a clear edge on the hardest goals (0.81 vs 0.61). The demos supply the exploration that SGS was providing, but SGS still steers practice toward the long goals.
 - Caveat: a perfect expert is cheap here because the maze is fully known. With real robots, demos come from teleoperation and are imperfect, so 1% of configs is a small but not free budget.
 
@@ -218,20 +235,22 @@ The 8×8 maze was chosen so that uniform sampling plateaus around 50% instead of
 
 ## Next steps
 
-**Running now:** [next3.sh](next3.sh), in this order (resumable, logs to `next.log`):
+**Nothing is running.** The last queue, [next3.sh](next3.sh), has finished (logs in `next.log`):
 
 | # | Experiment | Why | Est. GPU time | Status |
 |---|---|---|---|---|
 | 1 | **PLR with β=1.0**, 4K/16K/64K × 3 seeds | Fair version of the paper's main baseline (see above) | ~4 h | **Done** |
 | 2 | **4 more maze layouts** (`--maze-seed 1..4`) × {SGS, uniform, PLR β=1}, 4K | Check that the result isn't specific to one maze | ~1 h | **Done** |
-| 3 | **Learning rate scaled with batch size** (√ rule: 6e-4 at 16K, 1.2e-3 at 64K) × {SGS, uniform} × 3 seeds | Rule out that uniform's flat curve is a fixed-LR artifact | ~7.5 h | Running (paused once for the prior-knowledge runs) |
+| 3 | **Learning rate scaled with batch size** (√ rule: 6e-4 at 16K, 1.2e-3 at 64K) × {SGS, uniform} × 3 seeds | Rule out that uniform's flat curve is a fixed-LR artifact | ~7.5 h | **Done** (paused once for the prior-knowledge runs) |
 | 4 | **128K environments** × {SGS, uniform} × 3 seeds | One more step on the scaling curve | ~12 h | **Cancelled** (too many GPU-hours) |
 
 Afterwards, possibly: **FetchPush** (Gymnasium-Robotics) with SGS vs uniform vs HER, as a real manipulation task. That one is CPU-bound and would take days.
 
-**Done:** 3 more seeds at 16K (resolved the dip, see above); PLR at β=0.1 (degenerate, see above); Acrobot (negative control, see above).
+**Also done:** 3 more seeds at 16K (resolved the dip); PLR at β=0.1 (degenerate); Acrobot (negative control); prior-knowledge experiments (maze demos, Acrobot reverse resets). See above for each.
 
-`plot.py` reads `runs_sweep/` and `runs_plr_b1/` by default and picks up new JSON files automatically. Pass directories to plot another set, for example `plot.py runs_lr`.
+**Open ideas:** check which part of the pool SGS samples when Acrobot reverse resets are mixed in; demos with imperfect, noisy experts; demos at even smaller scales (256 envs).
+
+`plot.py` reads `runs_sweep/` and `runs_plr_b1/` by default and picks up new JSON files automatically. `plot.py runs_lr runs_sweep --only sgs,uniform` draws the learning-rate comparison.
 
 ## Running it
 
@@ -249,7 +268,7 @@ uv pip install --python .venv/bin/python numpy matplotlib
 
 ## GPU budget
 
-So far everything here has used **about 13 hours of one RTX 4060 Ti**:
+Everything here used **about 27 hours of one RTX 4060 Ti**:
 
 | Phase | Runs | GPU wall-clock |
 |---|---|---|
@@ -258,9 +277,13 @@ So far everything here has used **about 13 hours of one RTX 4060 Ti**:
 | 3 more seeds at 16K | 6 | 1.6 h |
 | PLR β=0.1 (cancelled after 5 runs) | 5 | ~1.9 h |
 | Acrobot calibration and seeds | 17 | ~0.8 h (2–4 runs shared the GPU at a time) |
-| **Total so far** | **55** | **~13 h** |
+| PLR β=1 | 9 | 4.0 h |
+| Other maze layouts | 12 | 1.0 h |
+| Learning-rate scaling | 12 | ~7.4 h (excluding the pause) |
+| Prior knowledge (maze demos, Acrobot reverse resets) | 18 | 1.2 h (3 runs at a time) |
+| **Total** | **106** | **~27 h** |
 
-The queue under "Next steps" adds about 25 h.
+The 128K-environment runs (~12 h) were cancelled to save GPU time.
 
 Time per 1000-iteration run with the GPU to itself:
 
@@ -270,7 +293,7 @@ Time per 1000-iteration run with the GPU to itself:
 | 16K | ~15 min | 524 M |
 | 64K | ~60 min | 2.1 B |
 
-At 4K environments training uses about 0.7 GB of GPU memory. Memory at 64K wasn't logged. 128K should still fit in 16 GB, raising `--num-minibatches` if needed, so the practical limit is time. For comparison, a *single* locomotion run in the paper takes about 36 hours on multiple datacenter GPUs.
+Training uses about 0.7 GB of GPU memory at 4K environments and about 8 GB at 64K. So 128K would need more minibatches (`--num-minibatches`) to fit in 16 GB. For comparison, a *single* locomotion run in the paper takes about 36 hours on multiple datacenter GPUs.
 
 ## Files
 

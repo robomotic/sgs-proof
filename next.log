@@ -418,3 +418,34 @@ MAZES DONE
 [sgs E=65536 s=2] it   200  eval 0.520  by-dist 0.71 0.35 0.05 nan  frontier 0.02  mastered 0.55  706s
 QUEUE PAUSED (SIGSTOP) for demo/reset experiments; resume with kill -CONT 629382 784595
 QUEUE RESUMED (SIGCONT)
+[sgs E=65536 s=2] it   300  eval 0.722  by-dist 0.83 0.62 0.49 nan  frontier 0.02  mastered 0.71  5579s
+[sgs E=65536 s=2] it   400  eval 0.726  by-dist 0.84 0.61 0.52 nan  frontier 0.01  mastered 0.76  5932s
+[sgs E=65536 s=2] it   500  eval 0.783  by-dist 0.86 0.69 0.71 nan  frontier 0.00  mastered 0.86  6284s
+[sgs E=65536 s=2] it   600  eval 0.821  by-dist 0.87 0.76 0.82 nan  frontier 0.01  mastered 0.88  6637s
+[sgs E=65536 s=2] it   700  eval 0.875  by-dist 0.91 0.83 0.92 nan  frontier 0.00  mastered 0.92  6990s
+[sgs E=65536 s=2] it   800  eval 0.888  by-dist 0.91 0.87 0.89 nan  frontier 0.00  mastered 0.93  7343s
+[sgs E=65536 s=2] it   900  eval 0.883  by-dist 0.91 0.86 0.79 nan  frontier 0.00  mastered 0.94  7696s
+[sgs E=65536 s=2] it  1000  eval 0.927  by-dist 0.94 0.91 0.92 nan  frontier 0.00  mastered 0.95  8048s
+[uniform E=16384 s=2] it   100  eval 0.308  by-dist 0.54 0.07 0.00 nan  frontier 0.34  mastered 0.05  93s
+[uniform E=16384 s=2] it   200  eval 0.407  by-dist 0.65 0.17 0.05 nan  frontier 0.42  mastered 0.07  186s
+[uniform E=16384 s=2] it   300  eval 0.414  by-dist 0.64 0.19 0.03 nan  frontier 0.42  mastered 0.10  278s
+[uniform E=16384 s=2] it   400  eval 0.432  by-dist 0.65 0.22 0.05 nan  frontier 0.40  mastered 0.13  371s
+[uniform E=16384 s=2] it   500  eval 0.433  by-dist 0.65 0.21 0.06 nan  frontier 0.38  mastered 0.15  463s
+[uniform E=16384 s=2] it   600  eval 0.463  by-dist 0.68 0.25 0.08 nan  frontier 0.37  mastered 0.17  556s
+[uniform E=16384 s=2] it   700  eval 0.465  by-dist 0.69 0.24 0.08 nan  frontier 0.34  mastered 0.21  649s
+[uniform E=16384 s=2] it   800  eval 0.478  by-dist 0.70 0.26 0.10 nan  frontier 0.26  mastered 0.29  741s
+[uniform E=16384 s=2] it   900  eval 0.502  by-dist 0.73 0.28 0.11 nan  frontier 0.18  mastered 0.38  834s
+[uniform E=16384 s=2] it  1000  eval 0.501  by-dist 0.74 0.27 0.10 nan  frontier 0.14  mastered 0.42  926s
+[uniform E=65536 s=2] it   100  eval 0.281  by-dist 0.50 0.05 0.00 nan  frontier 0.32  mastered 0.04  352s
+[uniform E=65536 s=2] it   200  eval 0.366  by-dist 0.57 0.16 0.02 nan  frontier 0.39  mastered 0.07  704s
+[uniform E=65536 s=2] it   300  eval 0.406  by-dist 0.62 0.20 0.03 nan  frontier 0.20  mastered 0.30  1055s
+[uniform E=65536 s=2] it   400  eval 0.437  by-dist 0.65 0.24 0.01 nan  frontier 0.17  mastered 0.37  1407s
+[uniform E=65536 s=2] it   500  eval 0.481  by-dist 0.70 0.27 0.04 nan  frontier 0.13  mastered 0.41  1758s
+[uniform E=65536 s=2] it   600  eval 0.525  by-dist 0.75 0.31 0.06 nan  frontier 0.11  mastered 0.45  2110s
+[uniform E=65536 s=2] it   700  eval 0.556  by-dist 0.78 0.35 0.06 nan  frontier 0.07  mastered 0.50  2462s
+[uniform E=65536 s=2] it   800  eval 0.572  by-dist 0.78 0.38 0.08 nan  frontier 0.05  mastered 0.54  2814s
+[uniform E=65536 s=2] it   900  eval 0.586  by-dist 0.79 0.40 0.08 nan  frontier 0.04  mastered 0.56  3165s
+[uniform E=65536 s=2] it  1000  eval 0.606  by-dist 0.80 0.43 0.09 nan  frontier 0.06  mastered 0.57  3517s
+LR DONE
+128K STEP CANCELLED BY USER
+128K STEP CANCELLED BY USER
