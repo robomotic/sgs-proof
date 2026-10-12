@@ -86,7 +86,8 @@ Final evaluation success after 1000 PPO iterations, mean ± std over 3 seeds (6 
 - **SGS gets the most out of the largest scale.** At 64K, SGS reaches 0.62 on the hardest goals, against 0.10 for uniform.
 - **With the learning rate scaled to batch size, SGS improves steadily with scale**: 0.63 → 0.79 → 0.88 overall from 4K to 64K, and 0.47 → 0.68 → 0.84 on the hardest goals. Uniform improves only modestly overall and stays flat at about 0.2 on the hardest goals. This is the paper's main claim. See [Learning-rate scaling](#learning-rate-scaling).
 - **SGS beats PLR at every scale (Q1), when PLR is given a sensible temperature.** Only SGS improves with more environments; PLR and uniform stay flat. See [PLR baseline](#plr-baseline).
-- **Not specific to one maze.** SGS beats uniform by 12–13 points on each of 4 other layouts. See [Other maze layouts](#other-maze-layouts).
+- **Not specific to one maze.** SGS beats uniform by 5–12 points on each of 4 other layouts (3 seeds). See [Other maze layouts](#other-maze-layouts).
+- **Robust to SGS's own settings, except temperature.** The target and concentration can vary widely and SGS still beats uniform; a temperature that's too low collapses it. See [SGS sensitivity](#sgs-sensitivity).
 - **Capability at small scale (Q2).** Even at 4K, SGS solves roughly twice as many of the hardest goals as uniform. A separate single-seed run on a smaller 6×6 maze showed the same pattern: 0.46 vs 0.24 on long goals.
 
 ### What didn't (cleanly) reproduce
@@ -135,17 +136,36 @@ The main sweep keeps the learning rate at 3e-4 while the batch grows 16×, so la
 
 ### Other maze layouts
 
-Is the result specific to one maze? Here are four more 8×8 layouts (`--maze-seed 1..4`), 4K envs, 1 seed each. The original layout is maze 0.
+Is the result specific to one maze? Here are four more 8×8 layouts (`--maze-seed 1..4`), 4K envs. SGS and uniform have 3 seeds each; PLR has 1. The original layout is maze 0.
 
 | Maze | SGS, all goals | Uniform, all goals | PLR β=1, all goals | SGS, hardest | Uniform, hardest | PLR β=1, hardest |
 |---|---|---|---|---|---|---|
 | 0 (3 seeds) | **0.63** | 0.52 | 0.58 | **0.47** | 0.22 | 0.33 |
-| 1 | **0.51** | 0.38 | 0.32 | **0.11** | 0.01 | 0.00 |
-| 2 | **0.58** | 0.45 | 0.38 | **0.29** | 0.04 | 0.00 |
-| 3 | **0.43** | 0.30 | 0.36 | 0.00 | 0.00 | 0.00 |
-| 4 | **0.61** | 0.47 | 0.47 | **0.06** | 0.02 | 0.04 |
+| 1 | **0.46** ± 0.04 | 0.41 ± 0.02 | 0.32 | **0.10** ± 0.07 | 0.04 ± 0.03 | 0.00 |
+| 2 | **0.53** ± 0.05 | 0.46 ± 0.02 | 0.38 | **0.16** ± 0.10 | 0.04 ± 0.01 | 0.00 |
+| 3 | **0.44** ± 0.01 | 0.32 ± 0.03 | 0.36 | 0.02 ± 0.02 | 0.00 | 0.00 |
+| 4 | **0.60** ± 0.02 | 0.48 ± 0.03 | 0.47 | **0.07** ± 0.01 | 0.01 ± 0.01 | 0.04 |
 
-**SGS beats uniform on every layout, by 12–13 points.** That's a remarkably consistent gap. PLR (β=1) is less robust: it beat uniform on maze 0 but loses to it on mazes 1 and 2, ties on maze 4, and wins only on maze 3. The new layouts are harder than maze 0 for every method, and the hardest goals stay mostly out of reach at 4K.
+**SGS beats uniform on every layout, by 5–12 points.** With 1 seed the gap looked like a uniform 12–13 points; with 3 seeds it varies by layout, but it's positive everywhere. PLR (β=1) is less robust: it beat uniform on maze 0 but loses to it on mazes 1 and 2, ties on maze 4, and wins only on maze 3. The new layouts are harder than maze 0 for every method, and the hardest goals stay mostly out of reach at 4K.
+
+### SGS sensitivity
+
+The paper reports that SGS isn't sensitive to most of its settings. Here each setting is changed one at a time from the defaults used everywhere else (target t=0.66, concentration κ=5, temperature T=2). Maze, 4K envs, 2 seeds each.
+
+| Setting | All goals | Hardest goals |
+|---|---|---|
+| Default (t=0.66, κ=5, T=2) | 0.63 ± 0.01 | 0.52 ± 0.10 |
+| t = 0.3 | **0.69** ± 0.02 | 0.51 ± 0.05 |
+| t = 0.5 | 0.67 ± 0.02 | 0.47 ± 0.02 |
+| t = 0.8 | 0.60 ± 0.03 | 0.45 ± 0.08 |
+| κ = 1 | 0.63 ± 0.02 | 0.44 ± 0.06 |
+| κ = 20 | 0.64 ± 0.01 | 0.50 ± 0.10 |
+| T = 8 (flatter) | 0.60 ± 0.00 | 0.31 ± 0.03 |
+| **T = 0.5 (greedier)** | **0.19** ± 0.00 | **0.00** |
+| *Uniform, for reference* | *0.52 ± 0.03* | *0.20 ± 0.11* |
+
+- **The target and concentration barely matter.** Every value of t from 0.3 to 0.8 and κ from 1 to 20 gives 0.60–0.69 overall, all well above uniform. A lower target (t=0.3, favouring harder configs) was slightly better here.
+- **Temperature is the one setting that can break SGS.** At T=0.5 the softmax becomes so peaked that the batch collapses onto a few configs, and success falls to 0.19, far *below* uniform. This is the same failure as PLR with β=0.1. A flatter T=8 behaves more like uniform sampling and loses about half the hardest-goal gain.
 
 ### Acrobot: a negative control
 
@@ -200,7 +220,38 @@ The paper deliberately avoids demonstrations and shaped rewards. This section as
 
 - **Demos on 1% of configs are worth roughly 16× the environments.** SGS + demos at 4K nearly matches SGS at 64K with a scaled learning rate on the hardest goals (0.81 vs 0.84), and comes within 7 points overall (0.81 vs 0.88). At **1K** environments, SGS + demos (0.77) already beats SGS at 64K with a fixed learning rate (0.68), a 64× smaller run.
 - **Demos mostly close the SGS–uniform gap overall** (0.81 vs 0.80), but SGS keeps a clear edge on the hardest goals (0.81 vs 0.61). The demos supply the exploration that SGS was providing, but SGS still steers practice toward the long goals.
-- Caveat: a perfect expert is cheap here because the maze is fully known. With real robots, demos come from teleoperation and are imperfect, so 1% of configs is a small but not free budget.
+- Caveat: a perfect expert is cheap here because the maze is fully known. With real robots, demos come from teleoperation and are imperfect, so 1% of configs is a small but not free budget. The next two experiments test smaller demo budgets and noisy experts.
+
+**How much demo data, at how many environments?** SGS with demos for 0.1%, 1% or 10% of the pool, at 256, 1K and 4K environments (2–3 seeds each, `./cheap.sh`):
+
+| Envs | No demos | 0.1% (33 configs) | 1% (327) | 10% (3,276) |
+|---|---|---|---|---|
+| *All goals* | | | | |
+| 256 | 0.41 | 0.57 | 0.68 | **0.71** |
+| 1K | 0.57 | 0.67 | **0.77** | 0.75 |
+| 4K | 0.63 | 0.73 | **0.81** | **0.81** |
+| *Hardest goals* | | | | |
+| 256 | 0.01 | 0.38 | 0.57 | **0.64** |
+| 1K | 0.31 | 0.50 | **0.73** | 0.70 |
+| 4K | 0.47 | 0.64 | **0.81** | 0.67 |
+
+![Demo value curve](demos_curve.png)
+
+- **256 environments with 1% demos (0.68) beat 4K environments with none (0.63)**, a 16× smaller run. On the hardest goals, demos take 256 envs from 0.01 to 0.57.
+- **Even 33 demonstrated configs (0.1%) help a lot:** +10 to +16 points overall at every scale.
+- **More demos isn't always better.** 10% helps most at 256 envs, matches 1% overall at 1K and 4K, and does worse on the hardest goals at 4K (0.67 vs 0.81, 2 seeds). A plausible reason is that a large behaviour-cloning set pulls the policy toward imitation for longer; with more envs, PPO's own experience matters more.
+
+**Noisy experts.** Each recorded expert action is replaced by a uniformly random one with probability p, mimicking a sloppy teleoperator (1% demos, 4K, 2 seeds; `--demo-noise`):
+
+| Expert | All goals | Hardest goals |
+|---|---|---|
+| Perfect | 0.81 | 0.81 |
+| 20% random actions | 0.81 | 0.78 |
+| 50% random actions | 0.74 | 0.56 ± 0.20 |
+| *No demos* | *0.63* | *0.47* |
+
+- **20% noise costs essentially nothing.** Random actions in the labels average out in a squared-error loss.
+- **Even with half the actions random, demos still beat no demos** (0.74 vs 0.63), though the hardest goals become seed-dependent.
 
 **Acrobot: demo-style resets without an expert.** Acrobot has no expert, so "demonstrations" are generated by simulating the dynamics **backward in time from upright** under random elbow torques within each config's limit. A state k steps back can reach upright in k steps by construction; the selftest checks that integrating backward and then forward returns to the start. Half the training pool is replaced by such starts, with k from 1 to 200 (`--reverse-frac 0.5`). Evaluation stays on the original start distribution.
 
@@ -212,7 +263,17 @@ The paper deliberately avoids demonstrations and shaped rewards. This section as
 | SGS + reverse resets | 0.28 ± 0.04 | 0.14 ± 0.02 |
 
 - **Reverse resets help uniform by 6 points**, with low variance. Practising near-upright states teaches the balancing phase, which every swing-up has to end with.
-- **They don't help SGS, and slightly hurt it.** A likely reason, not yet verified: the reverse starts are exactly the configs with intermediate success, so SGS spends most of its batch on them and little on the original starts it's evaluated on. Uniform keeps a fixed 50/50 split. Logging which part of the pool SGS samples would test this.
+- **They don't help SGS, and slightly hurt it.**
+
+**Why not? Diagnosis (3 seeds, `./cheap.sh`).** Logging which part of the pool SGS draws from confirms that SGS is pulled toward the reverse starts:
+
+| Iteration | Share of SGS resets from reverse starts | Success rate, reverse starts | Success rate, original starts |
+|---|---|---|---|
+| 250 | 67–70% | 0.73 | 0.13 |
+| 500 | 62–63% | 0.75 | 0.15 |
+| 1000 | 54–57% | 0.78 | 0.18 |
+
+But forcing a fixed 50/50 split, with SGS choosing only *within* each half (`--reverse-split`), **doesn't fix it**: 0.27 ± 0.02, no better than unsplit SGS (0.28) and still below uniform with reverse resets (0.37). So the batch share alone doesn't explain it. A remaining hypothesis: within the reverse half, SGS avoids the starts it has already mastered (p ≈ 1). Those are the near-upright, small-k starts that teach balancing, so SGS gets *less* balancing practice than uniform. Within the original half, SGS concentrates on a narrow set of mid-success configs, and Acrobot's evaluation needs broad coverage. This hasn't been tested.
 
 ### Not tested
 
@@ -246,9 +307,14 @@ The 8×8 maze was chosen so that uniform sampling plateaus around 50% instead of
 
 Afterwards, possibly: **FetchPush** (Gymnasium-Robotics) with SGS vs uniform vs HER, as a real manipulation task. That one is CPU-bound and would take days.
 
-**Also done:** 3 more seeds at 16K (resolved the dip); PLR at β=0.1 (degenerate); Acrobot (negative control); prior-knowledge experiments (maze demos, Acrobot reverse resets). See above for each.
+**Also done:** 3 more seeds at 16K (resolved the dip); PLR at β=0.1 (degenerate); Acrobot (negative control); prior-knowledge experiments (maze demos, Acrobot reverse resets); SGS sensitivity; demo-value curve and noisy experts; Acrobot sampling diagnosis; more seeds on other maze layouts. See above for each.
 
-**Open ideas:** check which part of the pool SGS samples when Acrobot reverse resets are mixed in; demos with imperfect, noisy experts; demos at even smaller scales (256 envs).
+**Open ideas:**
+
+- **Why SGS doesn't benefit from Acrobot reverse resets.** The batch-share explanation was ruled out (see above). The next test: log success by k (steps back from upright) and see whether SGS skips the near-upright starts.
+- **Hindsight Experience Replay (HER)** (Andrychowicz et al. 2017). After a failed episode, relabel the goal as wherever the agent actually ended up, so every episode yields a success for *some* goal. SGS changes *which* tasks get practised; HER changes *what is learned* from each episode, so the two could complement each other. HER needs an off-policy learner (SAC or DDPG) instead of PPO. The maze suits it well, since the "achieved goal" is just the final position. It's also the standard baseline needed for the FetchPush idea above.
+- **SGS + demos across scales:** do demos flatten SGS's scaling curve, or does the combination keep improving with more environments?
+- **A dynamic task with very uneven difficulty,** e.g. a point mass with inertia jumping gaps of varying width. This is closer to the paper's hard terrains than Acrobot, where every config needed the same skill.
 
 `plot.py` reads `runs_sweep/` and `runs_plr_b1/` by default and picks up new JSON files automatically. `plot.py runs_lr runs_sweep --only sgs,uniform` draws the learning-rate comparison.
 
@@ -268,7 +334,7 @@ uv pip install --python .venv/bin/python numpy matplotlib
 
 ## GPU budget
 
-Everything here used **about 27 hours of one RTX 4060 Ti**:
+Everything here used **about 31 hours of one RTX 4060 Ti**:
 
 | Phase | Runs | GPU wall-clock |
 |---|---|---|
@@ -281,7 +347,8 @@ Everything here used **about 27 hours of one RTX 4060 Ti**:
 | Other maze layouts | 12 | 1.0 h |
 | Learning-rate scaling | 12 | ~7.4 h (excluding the pause) |
 | Prior knowledge (maze demos, Acrobot reverse resets) | 18 | 1.2 h (3 runs at a time) |
-| **Total** | **106** | **~27 h** |
+| Sensitivity, demo curve, noisy demos, Acrobot diagnosis, layout seeds | 56 | 3.7 h (4 runs at a time) |
+| **Total** | **162** | **~31 h** |
 
 The 128K-environment runs (~12 h) were cancelled to save GPU time.
 
@@ -303,6 +370,8 @@ Training uses about 0.7 GB of GPU memory at 4K environments and about 8 GB at 64
 | `acrobot.py` | GPU-batched torque-limited Acrobot swing-up (RK4) with its energy-conservation self-test |
 | `sweep.sh` | 3 seeds × {4K, 16K, 64K} × {SGS, uniform} |
 | `priors.sh` | Prior-knowledge runs: maze demos (4K, 1K) and Acrobot reverse resets |
+| `cheap.sh` | SGS sensitivity, demo-value curve, noisy demos, Acrobot sampling diagnosis, more layout seeds |
+| `plot_demos.py` | Demo-value curve: `demos_curve.png` |
 | `next1.sh`, `next2.sh`, `next3.sh` | Follow-up queues: extra 16K seeds; PLR β=0.1 (cancelled); PLR β=1, mazes, LR scaling, 128K |
 | `plot.py` | Scaling plot and summary from `runs_sweep/*.json` |
 | `plot_maze.py` | Maze pictures: `maze_sizes.png`, `maze_configs.png` |

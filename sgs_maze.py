@@ -129,7 +129,7 @@ def expert_action(env, D):
 
 
 @torch.no_grad()
-def collect_demos(wall, D, starts, goals, horizon, speed, dev):
+def collect_demos(wall, D, starts, goals, horizon, speed, dev, noise=0.0):
     """Roll out the expert once per demo config; returns (obs, action) pairs until each episode succeeds, and the expert's success rate."""
     env = MazeEnv(wall, starts, goals, len(starts), horizon, speed, dev)
     ids = torch.arange(len(starts), device=dev)
@@ -138,6 +138,9 @@ def collect_demos(wall, D, starts, goals, horizon, speed, dev):
     obs, act, active = [], [], torch.ones(len(starts), dtype=torch.bool, device=dev)
     for _ in range(horizon):
         a = expert_action(env, Dt)
+        if noise > 0:  # imperfect "teleoperator": with prob `noise` the recorded (and executed) action is random
+            bad = torch.rand(len(a), device=dev) < noise
+            a = torch.where(bad[:, None], torch.rand_like(a) * 2 - 1, a)
         obs.append(env.obs()[active])
         act.append(a[active])
         active &= ~env.step(a)[2]
@@ -208,12 +211,20 @@ class Sampler:
         w = (p + e) ** (k * t) * (1 - p + e) ** (k * (1 - t))
         return torch.softmax(torch.log(w + e) / self.temp, 0)
 
-    def sample(self, n):
-        if self.mode == "uniform":
-            return torch.randint(self.N, (n,), device=self.hist.device)
+    def sample(self, n, mask=None):
+        """mask (bool [N]) restricts sampling to a subset of the pool (uniform/sgs only)."""
+        if n == 0:
+            return torch.zeros(0, dtype=torch.long, device=self.hist.device)
         if self.mode == "plr":
+            assert mask is None, "PLR doesn't support masked sampling"
             return self.plr_sample(n)
-        return torch.multinomial(self.probs(), n, replacement=True)
+        if self.mode == "uniform":
+            if mask is None:
+                return torch.randint(self.N, (n,), device=self.hist.device)
+            ids = mask.nonzero().squeeze(1)
+            return ids[torch.randint(len(ids), (n,), device=ids.device)]
+        p = self.probs()
+        return torch.multinomial(p if mask is None else p * mask, n, replacement=True)
 
 
 # ---------------------------------------------------------------- PPO
@@ -247,7 +258,7 @@ def train(args):
     torch.manual_seed(args.seed)
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     rng = np.random.default_rng(args.maze_seed)  # same task + config pool across runs; only training seed varies
-    demo_obs = None
+    demo_obs, rev_mask = None, None
     E, S = args.num_envs, args.num_steps
     if args.task == "maze":
         wall = make_maze(args.cells, args.braid, rng)
@@ -259,7 +270,7 @@ def train(args):
         bin_name, bins = "dist", [(1, 20), (21, 40), (41, 60), (61, args.max_dist)]
         if args.demo_frac > 0:  # demos for the first demo_frac of the (random) config pool
             k = max(1, int(args.demo_frac * args.num_configs))
-            demo_obs, demo_act, expert_sr = collect_demos(wall, D, starts[:k], goals[:k], args.horizon, args.speed, dev)
+            demo_obs, demo_act, expert_sr = collect_demos(wall, D, starts[:k], goals[:k], args.horizon, args.speed, dev, args.demo_noise)
             print(f"demos: {k} configs, {len(demo_obs)} (obs, action) pairs, expert success {expert_sr:.3f}", flush=True)
     else:
         import acrobot
@@ -269,12 +280,27 @@ def train(args):
         if args.reverse_frac > 0:  # replace the tail of the pool with backward-from-upright starts (after eval, so eval is unchanged)
             k = int(args.reverse_frac * args.num_configs)
             cfgs[-k:], _ = acrobot.make_reverse_configs(k, rng, tau, max_back=args.reverse_steps, dt=args.dt)
+            rev_mask = torch.arange(args.num_configs, device=dev) >= args.num_configs - k
         env = acrobot.AcrobotEnv(cfgs, E, args.horizon, args.dt, args.height, args.hold, dev)
         eval_env = acrobot.AcrobotEnv(ev_cfgs, args.eval_episodes, args.horizon, args.dt, args.height, args.hold, dev)
         bin_name, bins = "torque", [(args.tau_min, 1.0), (1.0, 1.5), (1.5, 2.0), (2.0, 3.0)]  # low torque = hard
     sampler = Sampler(args.num_configs, args.hist, args.sampler, args.target, args.kappa, args.eps, args.temp, dev)
     sampler.plr_beta = args.plr_beta
-    env.reset(torch.arange(E, device=dev), sampler.sample(E))
+    drawn = [0, 0]  # resets drawn since last eval: total, from the reverse part of the pool
+
+    def draw(n):
+        if rev_mask is None:
+            return sampler.sample(n)
+        if args.reverse_split:  # fixed 50/50 batch split; the sampler only chooses *within* each part
+            n_rev = (n + int(torch.randint(2, ())) ) // 2
+            idx = torch.cat([sampler.sample(n - n_rev, ~rev_mask), sampler.sample(n_rev, rev_mask)])
+        else:
+            idx = sampler.sample(n)
+        drawn[0] += n
+        drawn[1] += int(rev_mask[idx].sum())
+        return idx
+
+    env.reset(torch.arange(E, device=dev), draw(E))
 
     agent = Agent(env.obs_dim, env.act_dim).to(dev)
     opt = torch.optim.Adam(agent.parameters(), lr=args.lr)
@@ -300,7 +326,7 @@ def train(args):
             if len(ids):
                 sampler.update(env.cfg[ids], succ[ids])
                 ep_succ.append(succ[ids].float())
-                env.reset(ids, sampler.sample(len(ids)))
+                env.reset(ids, draw(len(ids)))
             obs = env.obs()
 
         # GAE. ponytail: timeouts treated as terminal (no bootstrap); obs has no time feature anyway.
@@ -349,10 +375,17 @@ def train(args):
                        train_success=torch.cat(ep_succ).mean().item() if ep_succ else 0.0,
                        frac_frontier=((p > 0.05) & (p < 0.95)).float().mean().item(),
                        frac_mastered=(p >= 0.95).float().mean().item())
+            if rev_mask is not None:
+                seen = sampler.ptr > 0
+                row.update(frac_drawn_reverse=drawn[1] / max(drawn[0], 1),
+                           p_reverse=p[rev_mask & seen].mean().item(), p_original=p[~rev_mask & seen].mean().item())
+                drawn[:] = [0, 0]
             log.append(row)
             print(f"[{args.sampler} E={E} s={args.seed}] it {it:5d}  eval {row['eval_success']:.3f}  "
                   f"by-{bin_name} {' '.join(f'{v:.2f}' for v in row[f'eval_by_{bin_name}'].values())}  "
-                  f"frontier {row['frac_frontier']:.2f}  mastered {row['frac_mastered']:.2f}  {row['time']:.0f}s", flush=True)
+                  f"frontier {row['frac_frontier']:.2f}  mastered {row['frac_mastered']:.2f}  {row['time']:.0f}s"
+                  + (f"  drawn-rev {row['frac_drawn_reverse']:.2f}  p-rev {row['p_reverse']:.2f}  p-orig {row['p_original']:.2f}"
+                     if rev_mask is not None else ""), flush=True)
 
     os.makedirs(args.out, exist_ok=True)
     with open(f"{args.out}/{args.sampler}_E{E}_s{args.seed}.json", "w") as f:  # one --out dir per task
@@ -380,6 +413,9 @@ def selftest():
     assert s.ptr.tolist() == [1, 0, 4, 0] and s.hist[2].sum() == 2  # 4th write wrapped over the 1st
     pr = s.probs()
     assert pr[0] < pr[2] and abs(pr.sum().item() - 1) < 1e-5  # p=2/3 beats p=1 at target 0.5
+    m = torch.arange(4) >= 2
+    for mode in ("uniform", "sgs"):  # masked sampling stays inside the mask
+        assert m[Sampler(4, 3, mode, 0.5, 1.0, 1e-4, 2.0, "cpu").sample(200, m)].all()
     s = Sampler(100, 3, "plr", 0, 0, 0, 1, "cpu")
     s.update_scores(torch.arange(50), torch.arange(50).float())  # configs 0-49 seen, 49 scores highest
     idx = s.sample(4000)
@@ -415,6 +451,7 @@ if __name__ == "__main__":
     ap.add_argument("--horizon", type=int, default=200)
     ap.add_argument("--speed", type=float, default=0.5)
     ap.add_argument("--demo-frac", type=float, default=0.0)  # fraction of configs with expert demos (0 = off)
+    ap.add_argument("--demo-noise", type=float, default=0.0)  # prob. each expert action is replaced by a random one
     ap.add_argument("--bc-coef", type=float, default=1.0)
     ap.add_argument("--bc-decay", type=float, default=0.995)  # per iteration: half-life ~140 iters
     # acrobot (--horizon also applies; acrobot runs should pass e.g. --horizon 400)
@@ -424,6 +461,7 @@ if __name__ == "__main__":
     ap.add_argument("--tau-min", type=float, default=0.5)
     ap.add_argument("--reverse-frac", type=float, default=0.0)  # fraction of pool replaced by backward-from-upright starts
     ap.add_argument("--reverse-steps", type=int, default=200)  # max steps simulated backward
+    ap.add_argument("--reverse-split", action="store_true")  # fix the batch at 50% original / 50% reverse starts
     # SGS (paper's locomotion values)
     ap.add_argument("--num-configs", type=int, default=32768)
     ap.add_argument("--hist", type=int, default=100)
