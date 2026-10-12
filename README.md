@@ -293,7 +293,7 @@ Time per 1000-iteration run with the GPU to itself:
 | 16K | ~15 min | 524 M |
 | 64K | ~60 min | 2.1 B |
 
-Training uses about 0.7 GB of GPU memory at 4K environments and about 8 GB at 64K. So 128K would need more minibatches (`--num-minibatches`) to fit in 16 GB. For comparison, a *single* locomotion run in the paper takes about 36 hours on multiple datacenter GPUs.
+Training uses about 0.7 GB of GPU memory at 4K environments and about 8 GB at 64K. So 128K would be close to the 16 GB limit and might need more minibatches (`--num-minibatches`). For comparison, a *single* locomotion run in the paper takes about 36 hours on multiple datacenter GPUs.
 
 ## Files
 
