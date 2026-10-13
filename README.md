@@ -292,6 +292,17 @@ A side experiment in [her/](her/README.md) runs **SAC**, an off-policy learner, 
 
 So for this problem on one small GPU, switching to an off-policy learner was worth more than any sampling strategy. Details in [her/README.md](her/README.md).
 
+### Does "SAC wins" transfer? Not to a standard manipulation benchmark
+
+To check whether the SAC result is about SAC or about the maze, [playground/](playground/README.md) runs **standard Brax PPO vs standard Brax SAC** on MuJoCo Playground's **PandaPickCube** (a Franka arm lifting a cube to a random target), each with Playground's own tuned settings.
+
+| PandaPickCube | Env steps | Wall-clock | Success |
+|---|---|---|---|
+| **PPO (3 seeds)** | ~30M | 14–17 min | **98%** |
+| SAC (1 seed) | 5M | 42 min | 0% |
+
+**The result reverses.** Both methods stall on the same reward plateau, reaching the cube without lifting it. SAC gets there about 10× sooner but stays stuck, while PPO's many parallel environments push through at about 13–16M steps. So the maze's huge SAC advantage most likely comes from the maze being short-horizon with plenty of easy successes, not from SAC itself. This is one task with one SAC seed, and a 20M-step SAC run is in progress; details and caveats are in [playground/README.md](playground/README.md).
+
 ### Not tested
 
 - **SFL baseline, and hand-designed curricula.**
@@ -352,7 +363,7 @@ uv pip install --python .venv/bin/python numpy matplotlib
 
 ## GPU budget
 
-Everything here used **about 34 hours of one RTX 4060 Ti**:
+Everything here used **about 35 hours of one RTX 4060 Ti**:
 
 | Phase | Runs | GPU wall-clock |
 |---|---|---|
@@ -367,7 +378,8 @@ Everything here used **about 34 hours of one RTX 4060 Ti**:
 | Prior knowledge (maze demos, Acrobot reverse resets) | 18 | 1.2 h (3 runs at a time) |
 | Sensitivity, demo curve, noisy demos, Acrobot diagnosis, layout seeds | 56 | 3.7 h (4 runs at a time) |
 | SAC / HER smoke tests and experiment ([her/](her/README.md)) | 18 | ~2.5 h (2–4 runs at a time) |
-| **Total** | **180** | **~34 h** |
+| PandaPickCube: Brax PPO × 3, SAC 1M and 5M, smoke tests ([playground/](playground/README.md)) | 7 | ~1.2 h (2 runs at a time) |
+| **Total** | **187** | **~35 h** |
 
 The 128K-environment runs (~12 h) were cancelled to save GPU time.
 
@@ -390,6 +402,7 @@ Training uses about 0.7 GB of GPU memory at 4K environments and about 8 GB at 64
 | `sweep.sh` | 3 seeds × {4K, 16K, 64K} × {SGS, uniform} |
 | `priors.sh` | Prior-knowledge runs: maze demos (4K, 1K) and Acrobot reverse resets |
 | `her/` | SAC + HER side experiment: code, results, figure and its own README |
+| `playground/` | Brax PPO vs SAC on MuJoCo Playground PandaPickCube (separate JAX venv), with its own README |
 | `cheap.sh` | SGS sensitivity, demo-value curve, noisy demos, Acrobot sampling diagnosis, more layout seeds |
 | `plot_demos.py` | Demo-value curve: `demos_curve.png` |
 | `next1.sh`, `next2.sh`, `next3.sh` | Follow-up queues: extra 16K seeds; PLR β=0.1 (cancelled); PLR β=1, mazes, LR scaling, 128K |

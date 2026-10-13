@@ -1,0 +1,64 @@
+Warp UserWarning: 
+   Insufficient CUDA driver version.
+   The minimum required CUDA driver version is 13.0, but the installed CUDA driver version is 12.8.
+   Visit https://nvidia.github.io/warp/stable/user_guide/installation.html for guidance.
+Warp UserWarning: 
+   Insufficient CUDA driver version.
+   The minimum required CUDA driver version is 13.0, but the installed CUDA driver version is 12.8.
+   Visit https://nvidia.github.io/warp/stable/user_guide/installation.html for guidance.
+Warp 1.18.0 initialized:
+   CUDA Toolkit 13.4, Driver 12.8 (insufficient CUDA driver version!)
+   Devices:
+     "cpu"      : "x86_64"
+   Kernel cache:
+     /home/robomotic/.cache/warp/1.18.0
+[sac s=0]    0.0M  reward     63.0  steps-within-5cm    0.0/150  118s
+Warp 1.18.0 initialized:
+   CUDA Toolkit 13.4, Driver 12.8 (insufficient CUDA driver version!)
+   Devices:
+     "cpu"      : "x86_64"
+   Kernel cache:
+     /home/robomotic/.cache/warp/1.18.0
+[ppo s=1]    0.0M  reward    109.0  steps-within-5cm    0.0/150  118s
+[ppo s=1]    3.3M  reward    587.4  steps-within-5cm    0.0/150  387s
+[ppo s=1]    6.6M  reward    681.0  steps-within-5cm    0.0/150  460s
+[ppo s=1]    9.8M  reward    723.7  steps-within-5cm    0.0/150  534s
+[ppo s=1]   13.1M  reward    740.6  steps-within-5cm    0.0/150  570s
+[ppo s=1]   16.4M  reward    769.5  steps-within-5cm    0.0/150  592s
+[ppo s=1]   19.7M  reward   1054.0  steps-within-5cm   16.0/150  614s
+[sac s=0]    0.6M  reward    632.2  steps-within-5cm    0.0/150  620s
+[ppo s=1]   22.9M  reward   1087.3  steps-within-5cm   58.7/150  679s
+[ppo s=1]   26.2M  reward   1309.0  steps-within-5cm   85.7/150  753s
+[ppo s=1]   29.5M  reward   1324.1  steps-within-5cm   93.0/150  828s
+[sac s=0]    1.1M  reward    656.4  steps-within-5cm    0.0/150  894s
+[ppo s=1] FINAL success at last step 0.964  (ever within 5cm 0.968)  train time 13.8 min
+Warp UserWarning: 
+   Insufficient CUDA driver version.
+   The minimum required CUDA driver version is 13.0, but the installed CUDA driver version is 12.8.
+   Visit https://nvidia.github.io/warp/stable/user_guide/installation.html for guidance.
+Warp 1.18.0 initialized:
+   CUDA Toolkit 13.4, Driver 12.8 (insufficient CUDA driver version!)
+   Devices:
+     "cpu"      : "x86_64"
+   Kernel cache:
+     /home/robomotic/.cache/warp/1.18.0
+[ppo s=2]    0.0M  reward    103.1  steps-within-5cm    0.0/150  113s
+[sac s=0]    1.7M  reward    658.0  steps-within-5cm    0.0/150  1093s
+[sac s=0]    2.2M  reward    674.2  steps-within-5cm    0.0/150  1316s
+[ppo s=2]    3.3M  reward    573.8  steps-within-5cm    0.0/150  399s
+[ppo s=2]    6.6M  reward    669.8  steps-within-5cm    0.0/150  476s
+[ppo s=2]    9.8M  reward    702.0  steps-within-5cm    0.0/150  554s
+[ppo s=2]   13.1M  reward    797.9  steps-within-5cm    0.1/150  631s
+[sac s=0]    2.8M  reward    661.6  steps-within-5cm    0.0/150  1604s
+[ppo s=2]   16.4M  reward   1244.5  steps-within-5cm   98.0/150  705s
+[ppo s=2]   19.7M  reward   1331.3  steps-within-5cm  102.8/150  782s
+[ppo s=2]   22.9M  reward   1327.9  steps-within-5cm  104.9/150  860s
+[ppo s=2]   26.2M  reward   1345.8  steps-within-5cm  105.5/150  937s
+[sac s=0]    3.3M  reward    666.1  steps-within-5cm    0.0/150  1916s
+[ppo s=2]   29.5M  reward   1336.9  steps-within-5cm  104.0/150  1011s
+[ppo s=2] FINAL success at last step 0.992  (ever within 5cm 0.993)  train time 16.9 min
+[sac s=0]    3.9M  reward    683.1  steps-within-5cm    0.0/150  2132s
+[sac s=0]    4.4M  reward    671.9  steps-within-5cm    0.0/150  2326s
+[sac s=0]    5.0M  reward    674.4  steps-within-5cm    0.0/150  2520s
+[sac s=0] FINAL success at last step 0.000  (ever within 5cm 0.000)  train time 42.0 min
+STAGE A DONE

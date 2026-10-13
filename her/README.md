@@ -1,5 +1,7 @@
 # SAC + Hindsight Experience Replay on the SGS maze
 
+> **Update:** the headline result here, that plain SAC beats PPO + SGS with about 600× fewer steps, **did not transfer** to a standard benchmark. On MuJoCo Playground's PandaPickCube, standard Brax PPO reached 98% success in about 15 minutes, while Brax SAC was still at 0% after 5M steps (42 minutes). See [../playground/README.md](../playground/README.md).
+
 A side experiment to [the SGS reproduction](../README.md). It runs on the same maze, configuration pool, evaluation set and success rule, so its numbers compare directly with the PPO runs there.
 
 **The question:** SGS fixes sparse rewards by choosing *which tasks to practise*. Hindsight Experience Replay (HER; Andrychowicz et al. 2017) fixes them by changing *what is learned from each episode*: a failed episode is also stored as a success for the goal the agent actually reached. HER needs an off-policy learner, so this uses SAC instead of PPO. Does HER help, does SGS still help an off-policy learner, and do the two stack?
