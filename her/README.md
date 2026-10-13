@@ -1,6 +1,6 @@
 # SAC + Hindsight Experience Replay on the SGS maze
 
-> **Update:** the headline result here, that plain SAC beats PPO + SGS with about 600× fewer steps, **did not transfer** to a standard benchmark. On MuJoCo Playground's PandaPickCube, standard Brax PPO reached 98% success in about 15 minutes, while Brax SAC was still at 0% after 5M steps (42 minutes). See [../playground/README.md](../playground/README.md).
+> **Update:** the headline result here, that plain SAC beats PPO + SGS with about 600× fewer steps, **did not transfer** to a standard benchmark. On MuJoCo Playground's PandaPickCube, both standard Brax PPO and Brax SAC reach about 98–99% success. SAC needs only about 1.3× fewer environment steps, and PPO is about 8× faster in wall-clock (15 minutes vs 2 hours). See [../playground/README.md](../playground/README.md).
 
 A side experiment to [the SGS reproduction](../README.md). It runs on the same maze, configuration pool, evaluation set and success rule, so its numbers compare directly with the PPO runs there.
 

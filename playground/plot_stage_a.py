@@ -33,7 +33,7 @@ for label, pat, col, ls in SERIES:
 ax_r.set_xscale("log")
 ax_r.set_xlabel("Environment steps (log scale)")
 ax_r.set_ylabel("Episode reward (task's shaped reward)")
-ax_r.set_title("Reward: both stall near 670, only PPO escapes", loc="left", fontsize=11)
+ax_r.set_title("Reward: both stall near 670; SAC escapes at ~10M steps, PPO at ~14M", loc="left", fontsize=11)
 ax_r.axhline(670, color="#999", lw=1, ls=":")
 ax_r.grid(axis="y", color="#e5e5e5")
 for sp in ("top", "right"):
