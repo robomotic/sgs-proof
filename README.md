@@ -302,7 +302,7 @@ To check whether the SAC result is about SAC or about the maze, [playground/](pl
 | SAC (1 seed), short run | 5M | 42 min | 0% |
 | **SAC (1 seed), long run** | 20M | 123 min | **99%** |
 
-**Both solve it.** Both stall on the same reward plateau, which most likely means reaching the cube without lifting it. SAC escapes slightly earlier in environment steps (about 10–11.6M vs 13–16M), so it is only about 1.3× more sample-efficient here, not 600×. PPO is about **8× faster in wall-clock**. So the maze's huge SAC advantage most likely comes from the maze being short-horizon with plenty of easy successes. Details and caveats are in [playground/README.md](playground/README.md).
+**Both solve it.** Both stall on the same reward plateau, which most likely means reaching the cube without lifting it. SAC escapes slightly earlier in environment steps (about 10–11.6M vs 13–16M), so it is only about 1.3× more sample-efficient here, not 600×. PPO is about **8–15× faster in wall-clock** (8× with runs sharing the GPU, about 15× with the GPU to itself). So the maze's huge SAC advantage most likely comes from the maze being short-horizon with plenty of easy successes. Details and caveats are in [playground/README.md](playground/README.md).
 
 ### Not tested
 

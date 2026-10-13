@@ -1,0 +1,35 @@
+Warp UserWarning: 
+   Insufficient CUDA driver version.
+   The minimum required CUDA driver version is 13.0, but the installed CUDA driver version is 12.8.
+   Visit https://nvidia.github.io/warp/stable/user_guide/installation.html for guidance.
+Warp 1.18.0 initialized:
+   CUDA Toolkit 13.4, Driver 12.8 (insufficient CUDA driver version!)
+   Devices:
+     "cpu"      : "x86_64"
+   Kernel cache:
+     /home/robomotic/.cache/warp/1.18.0
+[ppo s=0]    0.0M  reward     99.5  steps-within-5cm    0.0/150  106s
+[ppo s=0]    3.3M  reward    545.7  steps-within-5cm    0.0/150  325s
+[ppo s=0]    6.6M  reward    685.8  steps-within-5cm    0.0/150  347s
+[ppo s=0]    9.8M  reward    719.1  steps-within-5cm    0.0/150  369s
+[ppo s=0]   13.1M  reward    728.0  steps-within-5cm    0.0/150  392s
+[ppo s=0]   16.4M  reward    822.4  steps-within-5cm    0.0/150  414s
+[ppo s=0]   19.7M  reward   1197.6  steps-within-5cm   72.0/150  436s
+[ppo s=0]   22.9M  reward   1292.9  steps-within-5cm   97.4/150  459s
+[ppo s=0]   26.2M  reward   1362.1  steps-within-5cm  105.9/150  481s
+[ppo s=0]   29.5M  reward   1385.1  steps-within-5cm  107.2/150  503s
+[ppo s=0] FINAL success at last step 0.992  (ever within 5cm 0.994)  train time 8.4 min
+3 episodes, success at final step: [True, True, True]
+wrote ppo_pick.gif ppo_filmstrip.png
+Exception ignored in: <function Renderer.__del__ at 0x780bc608a7a0>
+Traceback (most recent call last):
+  File "/mnt/sdc/sgs/maze_sgs/playground/.venv/lib/python3.12/site-packages/mujoco/rendering/classic/renderer.py", line 349, in __del__
+  File "/mnt/sdc/sgs/maze_sgs/playground/.venv/lib/python3.12/site-packages/mujoco/rendering/classic/renderer.py", line 335, in close
+  File "/mnt/sdc/sgs/maze_sgs/playground/.venv/lib/python3.12/site-packages/mujoco/egl/__init__.py", line 130, in free
+TypeError: 'NoneType' object is not callable
+Exception ignored in: <function GLContext.__del__ at 0x780bc608a160>
+Traceback (most recent call last):
+  File "/mnt/sdc/sgs/maze_sgs/playground/.venv/lib/python3.12/site-packages/mujoco/egl/__init__.py", line 139, in __del__
+  File "/mnt/sdc/sgs/maze_sgs/playground/.venv/lib/python3.12/site-packages/mujoco/egl/__init__.py", line 130, in free
+TypeError: 'NoneType' object is not callable
+VIDEO DONE

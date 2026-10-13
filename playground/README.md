@@ -2,7 +2,7 @@
 
 On the [2D maze](../README.md#off-policy-learning-sac-and-hindsight-experience-replay), plain SAC matched the best PPO + SGS result with about 600× fewer environment steps ([details](../her/README.md)). Before trying that on the SGS paper's own robot tasks, this checks it on a **standard GPU benchmark** with **standard implementations**: Brax PPO vs Brax SAC on MuJoCo Playground's `PandaPickCube`.
 
-**Short answer: no, not the 600× part.** Both methods solve PandaPickCube (about 98–99% success). SAC needs slightly fewer environment steps, about 1.3× fewer to escape the hardest part, but PPO gets there about **8× faster in wall-clock** (about 15 minutes against about 2 hours).
+**Short answer: no, not the 600× part.** Both methods solve PandaPickCube (about 98–99% success). SAC needs slightly fewer environment steps, about 1.3× fewer to escape the hardest part, but PPO gets there about **8–15× faster in wall-clock** (8–17 minutes against about 2 hours).
 
 ## The task
 
@@ -15,6 +15,16 @@ Every episode samples a new **task configuration**: the cube starts at a random 
 ![Where cube starts and targets are sampled](task_distribution.png)
 
 The policy has to learn a whole sequence: reach the cube, close the gripper on it, lift without dropping it, carry it to the target, and hold it there. The reward plateau in the results below most likely corresponds to getting stuck after the first step (reaching the cube without lifting it); that reading comes from how the reward is built, not from watching rollouts.
+
+### A trained policy doing it
+
+A PPO policy trained with Playground's tuned settings, on three random configurations (all three succeed; real-time speed):
+
+![Trained PPO policy picking the cube, three episodes](ppo_pick.gif)
+
+![Filmstrip of one episode](ppo_filmstrip.png)
+
+It reaches the cube within about 0.6 s, lifts it into the target by about 1.2 s, and holds it there for the rest of the 3-second episode. The cube is often hidden behind the gripper once it's grasped. This policy reached 99.2% success over 1024 evaluation episodes after **8.4 minutes** of training with the GPU to itself. It was retrained with `--save-rollout 3` (see `make_video.sh`); the weights are in `runs_video/ppo_s0.params`.
 
 ## Setup
 
@@ -56,7 +66,7 @@ uv venv .venv --python 3.12 && uv pip install --python .venv/bin/python "jax[cud
 
 - SAC has one seed, and its settings are tuned for locomotion, not manipulation. A manipulation-tuned SAC, or a modern parallel off-policy method such as FastTD3/FastSAC, might do much better.
 - SAC has one seed for each run length. Its escape point (about 10–11.6M steps) may vary across seeds as much as PPO's does (13–16M).
-- Runs shared the GPU with each other (2 at a time), so wall-clock times are somewhat inflated for both methods. The first ~2 minutes of every run are JIT compilation.
+- Runs shared the GPU with each other (2 at a time), so wall-clock times are inflated for both methods: the same PPO setup trained in 8.4 minutes with the GPU to itself, against 14–17 minutes shared. The 20M-step SAC run had the GPU almost entirely to itself, so the real wall-clock gap is closer to **15×** than 8×. The first ~2 minutes of every run are JIT compilation.
 - MJX backend instead of Warp, as noted above.
 
 ## Next
@@ -71,5 +81,6 @@ uv venv .venv --python 3.12 && uv pip install --python .venv/bin/python "jax[cud
 | `brax_compare.py` | Brax PPO or SAC on PandaPickCube with the success metric; writes `runs/<algo>_s<seed>.json` |
 | `run_stage_a.sh` | SAC 5M + PPO × 3 seeds (resumable) |
 | `plot_stage_a.py` | `stage_a.png` |
+| `make_video.sh`, `render_rollout.py` | Retrain PPO saving weights + 3 recorded episodes, then render `ppo_pick.gif` and `ppo_filmstrip.png` |
 | `render_task.py` | `task_scenes.png` (rendered example configurations) and `task_distribution.png` (where cube starts and targets are sampled) |
 | `runs/`, `runs_long/` | Per-run JSON logs: evaluation curve, training time, final success |
