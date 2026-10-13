@@ -4,6 +4,18 @@ On the [2D maze](../README.md#off-policy-learning-sac-and-hindsight-experience-r
 
 **Short answer: no.** On PandaPickCube, PPO reaches 98% success in about 15 minutes; SAC is still at 0% after 42 minutes (5M steps).
 
+## The task
+
+A Franka Panda arm has to pick up a small green cube (4 × 4 × 6 cm) from the table and hold it inside a red, translucent target floating in the air. Each episode is 150 control steps, 3 seconds at 50 Hz. The arm is controlled by small joint-position changes, 8 numbers per step: 7 joints plus the gripper.
+
+![Example PandaPickCube configurations](task_scenes.png)
+
+Every episode samples a new **task configuration**: the cube starts at a random spot in a 40 × 40 cm square on the table, and the target is placed somewhere above the same square, 20–40 cm up. So the cube has to be grasped and carried 21–62 cm (median 38 cm), usually mostly upward.
+
+![Where cube starts and targets are sampled](task_distribution.png)
+
+The policy has to learn a whole sequence: reach the cube, close the gripper on it, lift without dropping it, carry it to the target, and hold it there. The reward plateau in the results below most likely corresponds to getting stuck after the first step (reaching the cube without lifting it); that reading comes from how the reward is built, not from watching rollouts.
+
 ## Setup
 
 - **Task:** [MuJoCo Playground](https://github.com/google-deepmind/mujoco_playground) `PandaPickCube`. A Franka Panda arm must pick up a cube from a random spot on the table and hold it at a random 3D target, with 150 steps per episode. The task's own shaped reward is used unchanged.
@@ -56,4 +68,5 @@ uv venv .venv --python 3.12 && uv pip install --python .venv/bin/python "jax[cud
 | `brax_compare.py` | Brax PPO or SAC on PandaPickCube with the success metric; writes `runs/<algo>_s<seed>.json` |
 | `run_stage_a.sh` | SAC 5M + PPO × 3 seeds (resumable) |
 | `plot_stage_a.py` | `stage_a.png` |
+| `render_task.py` | `task_scenes.png` (rendered example configurations) and `task_distribution.png` (where cube starts and targets are sampled) |
 | `runs/`, `runs_long/` | Per-run JSON logs: evaluation curve, training time, final success |
